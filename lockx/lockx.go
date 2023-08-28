@@ -67,7 +67,9 @@ func (g *globalLock) Unlock() bool {
 // 刷新锁
 func (g *globalLock) Refresh() {
 	go func() {
-		ctx = context.WithTimeout(g.ctx, time.Second*30)
+		ctx,cancel := context.WithTimeout(g.ctx, time.Second*30)
+		defer cancel()
+
 		t := time.NewTicker(time.Second)
 		for {
 			select {

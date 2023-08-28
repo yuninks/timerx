@@ -31,7 +31,7 @@ func TestMain(m *testing.M) {
 		fmt.Println("redis init error")
 		return
 	}
-	Redis = client
+	// Redis = client
 
 }
 

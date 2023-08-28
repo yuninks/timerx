@@ -104,19 +104,19 @@ func (c *cluster) AddTimer(ctx context.Context, uniqueKey string, spaceTime time
 	})
 	execTime[uniqueKey] = nextTime
 	n, _ := json.Marshal(execTime)
-	fmt.Println("execTime:", execTime, string(n))
+	// fmt.Println("execTime:", execTime, string(n))
 	p.Set(ctx, c.nextKey, string(n), 0)
 
 	_, err := p.Exec(ctx)
 
-	fmt.Println("添加", err)
+	// fmt.Println("添加", err)
 
 	return err
 }
 
 // 计算下一次执行的时间
 func (c *cluster) computeTime() {
-	log.Println("begin computer")
+	// log.Println("begin computer")
 	ctx, cancel := context.WithCancel(c.ctx)
 	defer cancel()
 
@@ -174,7 +174,8 @@ func (c *cluster) computeTime() {
 	// log.Println("B", string(b))
 
 	_, err := p.Exec(ctx)
-	fmt.Println(err)
+	_ = err
+	// fmt.Println(err)
 }
 
 // 递归遍历获取执行时间

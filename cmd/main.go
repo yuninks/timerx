@@ -89,9 +89,9 @@ func re() {
 }
 
 func aa(ctx context.Context) bool {
-	fmt.Println(time.Now().Format(time.RFC3339))
-	fmt.Println("gggggggggggggggggggggggggggg")
+	// fmt.Println(time.Now().Format(time.RFC3339))
+	// fmt.Println("gggggggggggggggggggggggggggg")
 	a, err := timer.GetExtendParams(ctx)
-	fmt.Printf("%+v %+v", a, err)
+	fmt.Printf("%+v %+v \n\n", a, err)
 	return true
 }
