@@ -40,7 +40,7 @@ func InitCluster(ctx context.Context, red *redis.Client) *cluster {
 			zsetKey: "timer:zsetKey",
 		}
 
-		timer := time.NewTicker(time.Millisecond*100)
+		timer := time.NewTicker(time.Millisecond * 100)
 
 		go func(ctx context.Context, red *redis.Client) {
 		Loop:
@@ -219,6 +219,8 @@ func (c *cluster) getTask() {
 
 // 执行任务
 func doTask(ctx context.Context, red *redis.Client, taskId string) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	defer func() {
 		if err := recover(); err != nil {

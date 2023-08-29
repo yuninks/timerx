@@ -3,6 +3,7 @@ package lockx
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -32,8 +33,10 @@ func (g *globalLock) Lock() bool {
 	return redis.call('set',KEYS[1],ARGV[1],'EX',ARGV[2])
 	`
 
-	resp, _ := g.redis.Eval(g.ctx, script, []string{g.uniqueKey}, g.value, 10).Result()
-
+	resp, err := g.redis.Eval(g.ctx, script, []string{g.uniqueKey}, g.value, 10).Result()
+	if resp != "OK" {
+		log.Println("globalLock Lock", resp, err)
+	}
 	return resp == "OK"
 }
 
@@ -55,19 +58,23 @@ func (g *globalLock) Unlock() bool {
 	local token = redis.call('get',KEYS[1])
 	if token == ARGV[1]
 	then
-		return redis.call('del',KEYS[1])
+		 redis.call('del',KEYS[1])
+		 return 'OK'
 	end
 	return 'ERROR'
 	`
 
-	resp, _ := g.redis.Eval(g.ctx, script, []string{g.uniqueKey}, g.value).Result()
+	resp, err := g.redis.Eval(g.ctx, script, []string{g.uniqueKey}, g.value).Result()
+	if resp != "OK" {
+		log.Println("globalLock Unlock", resp, err)
+	}
 	return resp == "OK"
 }
 
 // 刷新锁
 func (g *globalLock) Refresh() {
 	go func() {
-		ctx,cancel := context.WithTimeout(g.ctx, time.Second*30)
+		ctx, cancel := context.WithTimeout(g.ctx, time.Second*30)
 		defer cancel()
 
 		t := time.NewTicker(time.Second)
@@ -88,11 +95,15 @@ func (g *globalLock) refresh() bool {
 	local token = redis.call('get',KEYS[1])
 	if token == ARGV[1]
 	then
-		return redis.call('set',KEYS[1],ARGV[1],'EX',ARGV[2])
+		redis.call('set',KEYS[1],ARGV[1],'EX',ARGV[2])
+		return 'OK'
 	end
 	return 'ERROR'
 	`
 
-	resp, _ := g.redis.Eval(g.ctx, script, []string{g.uniqueKey}, g.value, 5).Result()
+	resp, err := g.redis.Eval(g.ctx, script, []string{g.uniqueKey}, g.value, 5).Result()
+	if resp != "OK" {
+		log.Println("globalLock refresh", resp, err)
+	}
 	return resp == "OK"
 }
