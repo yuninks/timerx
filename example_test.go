@@ -37,6 +37,7 @@ func TestMain(m *testing.M) {
 
 func TestRedis(t *testing.T) {
 	fmt.Println("6666")
+	t.Log("fffff")
 	// t.Fail()
 	// t.Error("ffff")
 	// Redis.Set(context.Background(), "dddd", "dddd", 0)
