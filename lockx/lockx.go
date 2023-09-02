@@ -38,10 +38,10 @@ func (g *globalLock) Lock() bool {
 		return 'ERROR'
 	`
 
-	resp, err := g.redis.Eval(g.ctx, script, []string{g.uniqueKey}, g.value, 10).Result()
+	resp, err := g.redis.Eval(g.ctx, script, []string{g.uniqueKey}, g.value, 5).Result()
 	if resp != "OK" {
 		_ = err
-		// log.Println("globalLock Lock", resp, err, g.uniqueKey, g.value)
+		log.Println("globalLock Lock", resp, err, g.uniqueKey, g.value)
 	}
 	return resp == "OK"
 }

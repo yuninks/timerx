@@ -45,7 +45,7 @@ func InitCluster(ctx context.Context, red *redis.Client) *cluster {
 		// 监听任务
 		go clu.watch()
 
-		timer := time.NewTicker(time.Millisecond * 100)
+		timer := time.NewTicker(time.Millisecond*100)
 
 		go func(ctx context.Context, red *redis.Client) {
 		Loop:
@@ -190,24 +190,38 @@ func getNextExecTime(beforeTime time.Time, spaceTime time.Duration) time.Time {
 // 获取任务
 func (c *cluster) getTask() {
 	// 定时去Redis获取任务
-	zb := redis.ZRangeBy{
-		Min: "0",
-		Max: fmt.Sprintf("%+v", time.Now().UnixMilli()),
-	}
+	// zb := redis.ZRangeBy{
+	// 	Min: "0",
+	// 	Max: fmt.Sprintf("%+v", time.Now().UnixMilli()),
+	// }
 
-	taskList, _ := c.redis.ZRangeByScore(c.ctx, c.zsetKey, &zb).Result()
+	// taskList, _ := c.redis.ZRangeByScore(c.ctx, c.zsetKey, &zb).Result()
 
-	p := c.redis.Pipeline()
+	// if len(taskList) == 0 {
+	// 	return
+	// }
 
-	for _, val := range taskList {
-		// 添加到可执行队列
-		p.LPush(c.ctx, c.listKey, val)
-		// 删除有序集合
-		p.ZRem(c.ctx, c.zsetKey, val)
-	}
-	_, err := p.Exec(c.ctx)
-	// fmt.Println(err)
-	_ = err
+	// p := c.redis.Pipeline()
+
+	// for _, val := range taskList {
+	// 	// 添加到可执行队列
+	// 	p.LPush(c.ctx, c.listKey, val)
+	// 	// 删除有序集合
+	// 	p.ZRem(c.ctx, c.zsetKey, val)
+	// }
+	// _, err := p.Exec(c.ctx)
+	// // fmt.Println(err)
+	// _ = err
+
+	script := `
+	local token = redis.call('zrangebyscore',KEYS[1],ARGV[1],ARGV[2])
+	for i,v in ipairs(token) do
+		redis.call('zrem',KEYS[1],v)
+		redis.call('lpush',KEYS[2],v)
+	end
+	return "OK"
+	`
+	c.redis.Eval(c.ctx, script, []string{c.zsetKey, c.listKey}, 0, time.Now().UnixMilli()).Result()
 
 }
 

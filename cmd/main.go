@@ -23,6 +23,7 @@ func main() {
 	// fmt.Println(mm)
 
 	re()
+	// d()
 
 }
 
@@ -39,51 +40,51 @@ func re() {
 
 	ctx := context.Background()
 	cl := timer.InitCluster(ctx, client)
-	cl.AddTimer(ctx, "test1", 1*time.Second, aa, timer.ExtendParams{
+	cl.AddTimer(ctx, "test1", 1*time.Millisecond, aa, timer.ExtendParams{
 		Params: map[string]interface{}{
 			"test": "text1",
 		},
 	})
-	// cl.AddTimer(ctx, "test2", 1*time.Second, aa, timer.ExtendParams{
-	// 	Params: map[string]interface{}{
-	// 		"test": "text2",
-	// 	},
-	// })
-	// cl.AddTimer(ctx, "test3", 1*time.Second, aa, timer.ExtendParams{
-	// 	Params: map[string]interface{}{
-	// 		"test": "text3",
-	// 	},
-	// })
-	// cl.AddTimer(ctx, "test4", 1*time.Second, aa, timer.ExtendParams{
-	// 	Params: map[string]interface{}{
-	// 		"test": "text4",
-	// 	},
-	// })
-	// cl.AddTimer(ctx, "test5", 1*time.Second, aa, timer.ExtendParams{
-	// 	Params: map[string]interface{}{
-	// 		"test": "text5",
-	// 	},
-	// })
-	// cl.AddTimer(ctx, "test6", 1*time.Second, aa, timer.ExtendParams{
-	// 	Params: map[string]interface{}{
-	// 		"test": "text6",
-	// 	},
-	// })
-	// cl.AddTimer(ctx, "test7", 1*time.Second, aa, timer.ExtendParams{
-	// 	Params: map[string]interface{}{
-	// 		"test": "text7",
-	// 	},
-	// })
-	// cl.AddTimer(ctx, "test8", 1*time.Second, aa, timer.ExtendParams{
-	// 	Params: map[string]interface{}{
-	// 		"test": "text8",
-	// 	},
-	// })
-	// cl.AddTimer(ctx, "test9", 1*time.Second, aa, timer.ExtendParams{
-	// 	Params: map[string]interface{}{
-	// 		"test": "text9",
-	// 	},
-	// })
+	cl.AddTimer(ctx, "test2", 1*time.Millisecond, aa, timer.ExtendParams{
+		Params: map[string]interface{}{
+			"test": "text2",
+		},
+	})
+	cl.AddTimer(ctx, "test3", 1*time.Millisecond, aa, timer.ExtendParams{
+		Params: map[string]interface{}{
+			"test": "text3",
+		},
+	})
+	cl.AddTimer(ctx, "test4", 1*time.Millisecond, aa, timer.ExtendParams{
+		Params: map[string]interface{}{
+			"test": "text4",
+		},
+	})
+	cl.AddTimer(ctx, "test5", 1*time.Millisecond, aa, timer.ExtendParams{
+		Params: map[string]interface{}{
+			"test": "text5",
+		},
+	})
+	cl.AddTimer(ctx, "test6", 1*time.Millisecond, aa, timer.ExtendParams{
+		Params: map[string]interface{}{
+			"test": "text6",
+		},
+	})
+	cl.AddTimer(ctx, "test7", 1*time.Millisecond, aa, timer.ExtendParams{
+		Params: map[string]interface{}{
+			"test": "text7",
+		},
+	})
+	cl.AddTimer(ctx, "test8", 1*time.Millisecond, aa, timer.ExtendParams{
+		Params: map[string]interface{}{
+			"test": "text8",
+		},
+	})
+	cl.AddTimer(ctx, "test9", 1*time.Millisecond, aa, timer.ExtendParams{
+		Params: map[string]interface{}{
+			"test": "text9",
+		},
+	})
 
 	select {}
 }
@@ -94,4 +95,39 @@ func aa(ctx context.Context) bool {
 	a, err := timer.GetExtendParams(ctx)
 	fmt.Printf("%+v %+v \n\n", a, err)
 	return true
+}
+
+func d() {
+
+	client := redis.NewClient(&redis.Options{
+		Addr:     "127.0.0.1" + ":" + "6379",
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+	if client == nil {
+		fmt.Println("redis init error")
+		return
+	}
+
+	client.ZAdd(context.Background(), "lockx:test2", &redis.Z{
+		Score:  50,
+		Member: "test",
+	})
+
+	script := `
+	local token = redis.call('zrangebyscore',KEYS[1],ARGV[1],ARGV[2])
+	for i,v in ipairs(token) do
+		redis.call('zrem',KEYS[1],v)
+		redis.call('lpush',KEYS[2],v)
+	end
+	return "OK"
+	`
+	res, err := client.Eval(context.Background(), script, []string{"lockx:test2", "lockx:push"}, 0, 100).Result()
+	fmt.Println(res, err)
+
+	for i := 0; i < 10; i++ {
+		l, e := client.RPop(context.Background(), "lockx:push").Result()
+		fmt.Println(l, e)
+	}
+
 }
