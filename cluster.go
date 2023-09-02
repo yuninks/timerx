@@ -82,7 +82,6 @@ func (c *cluster) AddTimer(ctx context.Context, uniqueKey string, spaceTime time
 		return errors.New("添加失败")
 	}
 	defer lock.Unlock()
-	lock.Refresh()
 
 	nowTime := time.Now()
 
@@ -134,9 +133,6 @@ func (c *cluster) getNextTime() {
 		return
 	}
 	defer lock.Unlock()
-
-	// 更新锁
-	lock.Refresh()
 
 	// 计算下一次时间
 
@@ -254,6 +250,7 @@ func doTask(ctx context.Context, red *redis.Client, taskId string) {
 
 	val, ok := clusterWorkerList.Load(taskId)
 	if !ok {
+		fmt.Println("doTask timer:任务不存在")
 		return
 	}
 	t := val.(timerStr)
@@ -266,7 +263,6 @@ func doTask(ctx context.Context, red *redis.Client, taskId string) {
 		return
 	}
 	defer lock.Unlock()
-	lock.Refresh()
 
 	ctx = context.WithValue(ctx, extendParamKey, t.Extend)
 

@@ -46,7 +46,6 @@ func TestLockx(t *testing.T) {
 		fmt.Println("lock error")
 	}
 	defer lock.Unlock()
-	lock.Refresh()
 
 	fmt.Println("ssss")
 
