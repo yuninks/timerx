@@ -26,6 +26,7 @@ type cluster struct {
 	lockKey string // 全局计算的key
 	nextKey string // 下一次执行的key
 	zsetKey string // 有序集合的key
+	listKey string // 可执行的任务列表的key
 }
 
 var clu *cluster = nil
@@ -38,7 +39,11 @@ func InitCluster(ctx context.Context, red *redis.Client) *cluster {
 			lockKey: "timer:globalLockKey",
 			nextKey: "timer:NextKey",
 			zsetKey: "timer:zsetKey",
+			listKey: "timer:listKey",
 		}
+
+		// 监听任务
+		go clu.watch()
 
 		timer := time.NewTicker(time.Millisecond * 100)
 
@@ -47,8 +52,8 @@ func InitCluster(ctx context.Context, red *redis.Client) *cluster {
 			for {
 				select {
 				case <-timer.C:
-					go clu.computeTime()
-					go clu.getTask()
+					clu.getTask()
+					clu.getNextTime()
 				case <-ctx.Done():
 					break Loop
 				}
@@ -115,7 +120,8 @@ func (c *cluster) AddTimer(ctx context.Context, uniqueKey string, spaceTime time
 }
 
 // 计算下一次执行的时间
-func (c *cluster) computeTime() {
+func (c *cluster) getNextTime() {
+
 	// log.Println("begin computer")
 	ctx, cancel := context.WithCancel(c.ctx)
 	defer cancel()
@@ -124,7 +130,7 @@ func (c *cluster) computeTime() {
 	// 获取锁
 	lockBool := lock.Lock()
 	if !lockBool {
-		log.Println("timer:获取锁失败")
+		// log.Println("timer:获取锁失败")
 		return
 	}
 	defer lock.Unlock()
@@ -139,19 +145,14 @@ func (c *cluster) computeTime() {
 	execTime := make(map[string]time.Time)
 	json.Unmarshal([]byte(cacheStr), &execTime)
 
-	// log.Println("cacheStr:", cacheStr, execTime)
-	// return
-
 	p := c.redis.Pipeline()
 
 	nowTime := time.Now()
 
 	clusterWorkerList.Range(func(key, value interface{}) bool {
-		// log.Println("range:", key, value)
 		val := value.(timerStr)
 		beforeTime := execTime[val.UniqueKey]
 		if beforeTime.After(nowTime) {
-			// log.Println("sssss")
 			return true
 		}
 		nextTime := getNextExecTime(beforeTime, val.SpaceTime)
@@ -161,21 +162,16 @@ func (c *cluster) computeTime() {
 			Score:  float64(nextTime.UnixMilli()),
 			Member: val.UniqueKey,
 		})
-		// log.Println("ffffffffffff")
+		// log.Println("computeTime add", c.zsetKey, val.UniqueKey, nextTime.UnixMilli())
 		return true
 	})
-
-	// log.Println("ssssssddddd")
 
 	// 更新缓存
 	b, _ := json.Marshal(execTime)
 	p.Set(ctx, c.nextKey, string(b), 0)
 
-	// log.Println("B", string(b))
-
 	_, err := p.Exec(ctx)
 	_ = err
-	// fmt.Println(err)
 }
 
 // 递归遍历获取执行时间
@@ -185,9 +181,6 @@ func getNextExecTime(beforeTime time.Time, spaceTime time.Duration) time.Time {
 		return beforeTime
 	}
 	nextTime := beforeTime.Add(spaceTime)
-	// fmt.Println(nextTime.Format(time.RFC3339))
-	// fmt.Println(nowTime.Format(time.RFC3339))
-	// fmt.Println(beforeTime.Before(nowTime))
 	if nextTime.Before(nowTime) {
 		nextTime = getNextExecTime(nextTime, spaceTime)
 	}
@@ -204,17 +197,33 @@ func (c *cluster) getTask() {
 
 	taskList, _ := c.redis.ZRangeByScore(c.ctx, c.zsetKey, &zb).Result()
 
-	// 删除粉丝
-	inter := []interface{}{}
-	for _, val := range taskList {
-		inter = append(inter, val)
-	}
-	c.redis.ZRem(c.ctx, c.zsetKey, inter...)
+	p := c.redis.Pipeline()
 
 	for _, val := range taskList {
-		go doTask(c.ctx, c.redis, val)
+		// 添加到可执行队列
+		p.LPush(c.ctx, c.listKey, val)
+		// 删除有序集合
+		p.ZRem(c.ctx, c.zsetKey, val)
 	}
+	_, err := p.Exec(c.ctx)
+	// fmt.Println(err)
+	_ = err
 
+}
+
+// 监听任务
+func (c *cluster) watch() {
+	// 执行任务
+	for {
+		keys, err := c.redis.BLPop(c.ctx, time.Second*10, c.listKey).Result()
+		if err != nil {
+			fmt.Println("watch err:", err)
+			continue
+		}
+		for _, val := range keys {
+			go doTask(c.ctx, c.redis, val)
+		}
+	}
 }
 
 // 执行任务
@@ -239,6 +248,7 @@ func doTask(ctx context.Context, red *redis.Client, taskId string) {
 	lock := lockx.NewGlobalLock(ctx, red, taskId)
 	tB := lock.Lock()
 	if !tB {
+		fmt.Println("doTask timer:获取锁失败")
 		return
 	}
 	defer lock.Unlock()

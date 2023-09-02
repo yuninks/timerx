@@ -11,7 +11,21 @@ import (
 
 var Redis *redis.Client
 
-func TestMain(m *testing.M) {
+// func TestMain(m *testing.M) {
+// 	client := redis.NewClient(&redis.Options{
+// 		Addr:     "127.0.0.1" + ":" + "6379",
+// 		Password: "", // no password set
+// 		DB:       0,  // use default DB
+// 	})
+// 	if client == nil {
+// 		fmt.Println("redis init error")
+// 		return
+// 	}
+// 	// fmt.Println("ffff")
+// 	Redis = client
+// }
+
+func TestLockx(t *testing.T) {
 	client := redis.NewClient(&redis.Options{
 		Addr:     "127.0.0.1" + ":" + "6379",
 		Password: "", // no password set
@@ -21,22 +35,19 @@ func TestMain(m *testing.M) {
 		fmt.Println("redis init error")
 		return
 	}
-	Redis = client
-}
-
-func TestLockx(t *testing.T) {
+	fmt.Println("begin")
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	lock := lockx.NewGlobalLock(ctx, Redis, "lockx:test")
+	lock := lockx.NewGlobalLock(ctx, client, "lockx:test")
 
 	if !lock.Lock() {
-		t.Log("lock error")
+		fmt.Println("lock error")
 	}
 	defer lock.Unlock()
 	lock.Refresh()
 
-	t.Log("doing")
+	fmt.Println("ssss")
 
 }

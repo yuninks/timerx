@@ -44,46 +44,46 @@ func re() {
 			"test": "text1",
 		},
 	})
-	cl.AddTimer(ctx, "test2", 1*time.Second, aa, timer.ExtendParams{
-		Params: map[string]interface{}{
-			"test": "text2",
-		},
-	})
-	cl.AddTimer(ctx, "test3", 1*time.Second, aa, timer.ExtendParams{
-		Params: map[string]interface{}{
-			"test": "text3",
-		},
-	})
-	cl.AddTimer(ctx, "test4", 1*time.Second, aa, timer.ExtendParams{
-		Params: map[string]interface{}{
-			"test": "text4",
-		},
-	})
-	cl.AddTimer(ctx, "test5", 1*time.Second, aa, timer.ExtendParams{
-		Params: map[string]interface{}{
-			"test": "text5",
-		},
-	})
-	cl.AddTimer(ctx, "test6", 1*time.Second, aa, timer.ExtendParams{
-		Params: map[string]interface{}{
-			"test": "text6",
-		},
-	})
-	cl.AddTimer(ctx, "test7", 1*time.Second, aa, timer.ExtendParams{
-		Params: map[string]interface{}{
-			"test": "text7",
-		},
-	})
-	cl.AddTimer(ctx, "test8", 1*time.Second, aa, timer.ExtendParams{
-		Params: map[string]interface{}{
-			"test": "text8",
-		},
-	})
-	cl.AddTimer(ctx, "test9", 1*time.Second, aa, timer.ExtendParams{
-		Params: map[string]interface{}{
-			"test": "text9",
-		},
-	})
+	// cl.AddTimer(ctx, "test2", 1*time.Second, aa, timer.ExtendParams{
+	// 	Params: map[string]interface{}{
+	// 		"test": "text2",
+	// 	},
+	// })
+	// cl.AddTimer(ctx, "test3", 1*time.Second, aa, timer.ExtendParams{
+	// 	Params: map[string]interface{}{
+	// 		"test": "text3",
+	// 	},
+	// })
+	// cl.AddTimer(ctx, "test4", 1*time.Second, aa, timer.ExtendParams{
+	// 	Params: map[string]interface{}{
+	// 		"test": "text4",
+	// 	},
+	// })
+	// cl.AddTimer(ctx, "test5", 1*time.Second, aa, timer.ExtendParams{
+	// 	Params: map[string]interface{}{
+	// 		"test": "text5",
+	// 	},
+	// })
+	// cl.AddTimer(ctx, "test6", 1*time.Second, aa, timer.ExtendParams{
+	// 	Params: map[string]interface{}{
+	// 		"test": "text6",
+	// 	},
+	// })
+	// cl.AddTimer(ctx, "test7", 1*time.Second, aa, timer.ExtendParams{
+	// 	Params: map[string]interface{}{
+	// 		"test": "text7",
+	// 	},
+	// })
+	// cl.AddTimer(ctx, "test8", 1*time.Second, aa, timer.ExtendParams{
+	// 	Params: map[string]interface{}{
+	// 		"test": "text8",
+	// 	},
+	// })
+	// cl.AddTimer(ctx, "test9", 1*time.Second, aa, timer.ExtendParams{
+	// 	Params: map[string]interface{}{
+	// 		"test": "text9",
+	// 	},
+	// })
 
 	select {}
 }

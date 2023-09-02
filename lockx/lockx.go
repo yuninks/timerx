@@ -30,12 +30,18 @@ func NewGlobalLock(ctx context.Context, red *redis.Client, uniqueKey string) *gl
 func (g *globalLock) Lock() bool {
 
 	script := `
-	return redis.call('set',KEYS[1],ARGV[1],'EX',ARGV[2])
+	local token = redis.call('get',KEYS[1])
+	if token == false
+	then
+		return redis.call('set',KEYS[1],ARGV[1],'EX',ARGV[2])
+	end
+		return 'ERROR'
 	`
 
 	resp, err := g.redis.Eval(g.ctx, script, []string{g.uniqueKey}, g.value, 10).Result()
 	if resp != "OK" {
-		log.Println("globalLock Lock", resp, err)
+		_ = err
+		// log.Println("globalLock Lock", resp, err, g.uniqueKey, g.value)
 	}
 	return resp == "OK"
 }
@@ -58,15 +64,15 @@ func (g *globalLock) Unlock() bool {
 	local token = redis.call('get',KEYS[1])
 	if token == ARGV[1]
 	then
-		 redis.call('del',KEYS[1])
-		 return 'OK'
+		redis.call('del',KEYS[1])
+		return 'OK'
 	end
-	return 'ERROR'
+		return 'ERROR'
 	`
 
 	resp, err := g.redis.Eval(g.ctx, script, []string{g.uniqueKey}, g.value).Result()
 	if resp != "OK" {
-		log.Println("globalLock Unlock", resp, err)
+		log.Println("globalLock Unlock", resp, err, g.uniqueKey, g.value)
 	}
 	return resp == "OK"
 }
@@ -98,12 +104,12 @@ func (g *globalLock) refresh() bool {
 		redis.call('set',KEYS[1],ARGV[1],'EX',ARGV[2])
 		return 'OK'
 	end
-	return 'ERROR'
+		return 'ERROR'
 	`
 
 	resp, err := g.redis.Eval(g.ctx, script, []string{g.uniqueKey}, g.value, 5).Result()
 	if resp != "OK" {
-		log.Println("globalLock refresh", resp, err)
+		log.Println("globalLock refresh", resp, err, g.uniqueKey, g.value)
 	}
 	return resp == "OK"
 }
