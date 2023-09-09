@@ -22,21 +22,58 @@ func main() {
 
 	// fmt.Println(mm)
 
-	re()
+	// re()
 	// d()
+	worker()
 
 }
 
-func re() {
+func worker() {
+	client := getRedis()
+	w := timer.InitWorker(context.Background(), client, &Worker{})
+	w.AddJob("test", "test", 1*time.Second, map[string]interface{}{
+		"test": "test",
+	})
+	w.AddJob("test2", "test", 1*time.Second, map[string]interface{}{
+		"test": "test",
+	})
+	w.AddJob("test3", "test", 1*time.Second, map[string]interface{}{
+		"test": "test",
+	})
+	w.AddJob("test4", "test", 1*time.Second, map[string]interface{}{
+		"test": "test",
+	})
+	w.AddJob("test5", "test", 1*time.Second, map[string]interface{}{
+		"test": "test",
+	})
+
+	select {}
+}
+
+type Worker struct{}
+
+func (w *Worker) Worker(uniqueKey string, jobType string,data map[string]interface{}) timer.WorkerCode {
+	fmt.Println("执行时间:", time.Now().Format("2006-01-02 15:04:05"))
+	fmt.Println(uniqueKey, jobType)
+	fmt.Println(data)
+	return timer.WorkerCodeAgain
+}
+
+func getRedis() *redis.Client {
 	client := redis.NewClient(&redis.Options{
 		Addr:     "127.0.0.1" + ":" + "6379",
 		Password: "", // no password set
 		DB:       0,  // use default DB
 	})
 	if client == nil {
-		fmt.Println("redis init error")
-		return
+		panic("redis init error")
 	}
+	return client
+}
+
+func re() {
+
+	client := getRedis()
 
 	ctx := context.Background()
 	cl := timer.InitCluster(ctx, client)
@@ -94,7 +131,7 @@ func aa(ctx context.Context) bool {
 	// fmt.Println("gggggggggggggggggggggggggggg")
 	a, err := timer.GetExtendParams(ctx)
 	fmt.Printf("%+v %+v \n\n", a, err)
-	time.Sleep(time.Second*5)
+	time.Sleep(time.Second * 5)
 	return true
 }
 

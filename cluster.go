@@ -36,10 +36,10 @@ func InitCluster(ctx context.Context, red *redis.Client) *cluster {
 		clu = &cluster{
 			ctx:     ctx,
 			redis:   red,
-			lockKey: "timer:globalLockKey",
-			nextKey: "timer:NextKey",
-			zsetKey: "timer:zsetKey",
-			listKey: "timer:listKey",
+			lockKey: "timer:cluster_globalLockKey",
+			nextKey: "timer:cluster_nextKey",
+			zsetKey: "timer:cluster_zsetKey",
+			listKey: "timer:cluster_listKey",
 		}
 
 		// 监听任务
