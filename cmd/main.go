@@ -94,6 +94,7 @@ func aa(ctx context.Context) bool {
 	// fmt.Println("gggggggggggggggggggggggggggg")
 	a, err := timer.GetExtendParams(ctx)
 	fmt.Printf("%+v %+v \n\n", a, err)
+	time.Sleep(time.Second*5)
 	return true
 }
 

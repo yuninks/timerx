@@ -45,7 +45,7 @@ func InitCluster(ctx context.Context, red *redis.Client) *cluster {
 		// 监听任务
 		go clu.watch()
 
-		timer := time.NewTicker(time.Millisecond*100)
+		timer := time.NewTicker(time.Millisecond * 100)
 
 		go func(ctx context.Context, red *redis.Client) {
 		Loop:
@@ -230,9 +230,7 @@ func (c *cluster) watch() {
 			fmt.Println("watch err:", err)
 			continue
 		}
-		for _, val := range keys {
-			go doTask(c.ctx, c.redis, val)
-		}
+		go doTask(c.ctx, c.redis, keys[1])
 	}
 }
 
@@ -250,7 +248,7 @@ func doTask(ctx context.Context, red *redis.Client, taskId string) {
 
 	val, ok := clusterWorkerList.Load(taskId)
 	if !ok {
-		fmt.Println("doTask timer:任务不存在")
+		fmt.Println("doTask timer:任务不存在", taskId)
 		return
 	}
 	t := val.(timerStr)
@@ -259,7 +257,7 @@ func doTask(ctx context.Context, red *redis.Client, taskId string) {
 	lock := lockx.NewGlobalLock(ctx, red, taskId)
 	tB := lock.Lock()
 	if !tB {
-		fmt.Println("doTask timer:获取锁失败")
+		fmt.Println("doTask timer:获取锁失败", taskId)
 		return
 	}
 	defer lock.Unlock()
