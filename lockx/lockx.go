@@ -81,10 +81,7 @@ func (g *globalLock) Unlock() bool {
 	if resp != "OK" {
 		log.Println("globalLock Unlock", resp, err, g.uniqueKey, g.value)
 	}
-	if resp == "OK" {
-		g.cancel()
-		return true
-	}
+	g.cancel()
 	return false
 }
 

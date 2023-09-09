@@ -31,19 +31,19 @@ func main() {
 func worker() {
 	client := getRedis()
 	w := timer.InitWorker(context.Background(), client, &Worker{})
-	w.AddJob("test", "test", 1*time.Second, map[string]interface{}{
+	w.Add("test", "test", 1*time.Second, map[string]interface{}{
 		"test": "test",
 	})
-	w.AddJob("test2", "test", 1*time.Second, map[string]interface{}{
+	w.Add("test2", "test", 1*time.Second, map[string]interface{}{
 		"test": "test",
 	})
-	w.AddJob("test3", "test", 1*time.Second, map[string]interface{}{
+	w.Add("test3", "test", 1*time.Second, map[string]interface{}{
 		"test": "test",
 	})
-	w.AddJob("test4", "test", 1*time.Second, map[string]interface{}{
+	w.Add("test4", "test", 1*time.Second, map[string]interface{}{
 		"test": "test",
 	})
-	w.AddJob("test5", "test", 1*time.Second, map[string]interface{}{
+	w.Add("test5", "test", 1*time.Second, map[string]interface{}{
 		"test": "test",
 	})
 

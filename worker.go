@@ -50,8 +50,8 @@ func InitWorker(ctx context.Context, re *redis.Client, w WorkerInterface) *worke
 			redis:   re,
 			worker:  w,
 		}
-		go wo.getJob()
-		go wo.execJob()
+		go wo.getTask()
+		go wo.execTask()
 	})
 
 	return wo
@@ -59,7 +59,7 @@ func InitWorker(ctx context.Context, re *redis.Client, w WorkerInterface) *worke
 
 // 添加任务
 // 重复插入就代表覆盖
-func (w *worker) AddJob(uniqueKey string, jobType string, delayTime time.Duration, data map[string]interface{}) error {
+func (w *worker) Add(uniqueKey string, jobType string, delayTime time.Duration, data map[string]interface{}) error {
 	if delayTime.Abs() != delayTime {
 		return fmt.Errorf("时间间隔不能为负数")
 	}
@@ -89,7 +89,7 @@ func (w *worker) AddJob(uniqueKey string, jobType string, delayTime time.Duratio
 }
 
 // 删除任务
-func (w *worker) DelJob(uniqueKey string, jobType string) error {
+func (w *worker) Del(uniqueKey string, jobType string) error {
 	redisKey := fmt.Sprintf("%s[:]%s", uniqueKey, jobType)
 
 	w.redis.Del(w.ctx, redisKey).Result()
@@ -100,8 +100,8 @@ func (w *worker) DelJob(uniqueKey string, jobType string) error {
 }
 
 // 获取任务
-func (w *worker) getJob() {
-	timer := time.NewTicker(time.Millisecond * 100)
+func (w *worker) getTask() {
+	timer := time.NewTicker(time.Millisecond * 200)
 	defer timer.Stop()
 
 Loop:
@@ -126,7 +126,7 @@ Loop:
 }
 
 // 执行任务
-func (w *worker) execJob() {
+func (w *worker) execTask() {
 	for {
 		keys, err := w.redis.BLPop(w.ctx, time.Second*10, w.listKey).Result()
 		if err != nil {
@@ -152,9 +152,8 @@ func (w *worker) execJob() {
 			if code == WorkerCodeAgain {
 				// 重新放入队列
 				fmt.Println("重入时间：", time.Now().Format("2006-01-02 15:04:05"))
-				w.AddJob(s[0], s[1], ed.Delay, ed.Data)
+				w.Add(s[0], s[1], ed.Delay, ed.Data)
 			}
 		}()
-
 	}
 }

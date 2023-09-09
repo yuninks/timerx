@@ -45,7 +45,7 @@ func InitCluster(ctx context.Context, red *redis.Client) *cluster {
 		// 监听任务
 		go clu.watch()
 
-		timer := time.NewTicker(time.Millisecond * 100)
+		timer := time.NewTicker(time.Millisecond * 200)
 
 		go func(ctx context.Context, red *redis.Client) {
 		Loop:

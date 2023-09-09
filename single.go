@@ -32,7 +32,7 @@ const (
 // 定时器类
 func InitSingle(ctx context.Context) {
 	onceLimit.Do(func() {
-		timer := time.NewTicker(1 * time.Millisecond)
+		timer := time.NewTicker( time.Millisecond*200)
 		go func(ctx context.Context) {
 		Loop:
 			for {
