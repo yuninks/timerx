@@ -29,10 +29,16 @@ const (
 	extendParamKey ContextValueKey = "extend_param"
 )
 
+type single struct{}
+
+var sin *single = nil
+
 // 定时器类
-func InitSingle(ctx context.Context) {
+func InitSingle(ctx context.Context) *single {
 	onceLimit.Do(func() {
-		timer := time.NewTicker( time.Millisecond*200)
+		sin = &single{}
+
+		timer := time.NewTicker(time.Millisecond * 200)
 		go func(ctx context.Context) {
 		Loop:
 			for {
@@ -43,7 +49,7 @@ func InitSingle(ctx context.Context) {
 						continue
 					}
 					// 迭代定时器
-					iteratorTimer(ctx, t)
+					sin.iteratorTimer(ctx, t)
 					// fmt.Println("timer: 执行")
 				case <-ctx.Done():
 					// 跳出循环
@@ -53,10 +59,12 @@ func InitSingle(ctx context.Context) {
 			log.Println("timer: initend")
 		}(ctx)
 	})
+
+	return sin
 }
 
 // 间隔定时器
-func AddTimer(space time.Duration, call callback, extend ExtendParams) (int, error) {
+func (s *single) AddTimer(space time.Duration, call callback, extend ExtendParams) (int, error) {
 	timerMapMux.Lock()
 	defer timerMapMux.Unlock()
 
@@ -89,20 +97,20 @@ func AddTimer(space time.Duration, call callback, extend ExtendParams) (int, err
 }
 
 // 添加需要定时的规则
-func AddToTimer(space time.Duration, call callback) int {
+func (s *single) AddToTimer(space time.Duration, call callback) int {
 	extend := ExtendParams{}
-	count, _ := AddTimer(space, call, extend)
+	count, _ := s.AddTimer(space, call, extend)
 	return count
 }
 
-func DelToTimer(index string) {
+func (s *single) DelToTimer(index string) {
 	timerMapMux.Lock()
 	defer timerMapMux.Unlock()
 	delete(timerMap, index)
 }
 
 // 迭代定时器列表
-func iteratorTimer(ctx context.Context, nowTime time.Time) {
+func (s *single) iteratorTimer(ctx context.Context, nowTime time.Time) {
 	timerMapMux.Lock()
 	defer timerMapMux.Unlock()
 
@@ -151,7 +159,7 @@ func iteratorTimer(ctx context.Context, nowTime time.Time) {
 						}
 					}()
 					// fmt.Printf("timer: 准备执行 %v %v \n", k, v.Tag)
-					timerAction(ctx, v.Callback, v.UniqueKey, v.Extend)
+					s.timerAction(ctx, v.Callback, v.UniqueKey, v.Extend)
 				default:
 					// fmt.Printf("timer: 已在执行 %v %v \n", k, v.Tag)
 					return
@@ -179,7 +187,7 @@ type callback func(ctx context.Context) bool
 
 // 定时器操作类
 // 这里不应painc
-func timerAction(ctx context.Context, call callback, uniqueKey string, extend ExtendParams) bool {
+func (s *single) timerAction(ctx context.Context, call callback, uniqueKey string, extend ExtendParams) bool {
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Println("timer:定时器出错", err)
