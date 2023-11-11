@@ -8,6 +8,7 @@ deploy_job:
     - git config --global http.sslCAInfo /etc/ssl/certs/github_token.pem
     - git remote add github https://github.com/yun-ink/timerx.git
     - git remote -v
+    - git branch
     - git push github master
   only:
     - master
