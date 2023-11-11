@@ -4,10 +4,9 @@ stages:
 deploy_job:
   stage: deploy
   script:
-    - ls -la
-    - git remote -v
-    - git log
-    - git remote add github https://${GITHUB_TOKEN}:@github.com/yun-ink/timerx.git
+    - echo "$GITHUB_TOKEN" > /etc/ssl/certs/github_token.pem
+    - git config --global http.sslCAInfo /etc/ssl/certs/github_token.pem
+    - git remote add github https://github.com/yun-ink/timerx.git
     - git remote -v
     - git push github master
   only:
