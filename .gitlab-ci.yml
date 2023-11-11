@@ -17,7 +17,8 @@ deploy_job:
     - git remote -v
     - git checkout master
     #- git fsck --full
-    - git prune
+    #- git prune
+    - git gc --prune=now --aggressive
     - git push -u github master
   only:
     - master
