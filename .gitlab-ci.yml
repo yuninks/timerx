@@ -9,6 +9,7 @@ deploy_job:
     - git remote remove github || true
     - git remote add github https://github.com/yun-ink/timerx.git
     - git remote -v
+    - git checkout -b master
     - git branch
     - git push github master
   only:
