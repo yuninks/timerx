@@ -19,7 +19,7 @@ deploy_job:
     #- git fsck --full
     #- git prune
     - git gc --prune=now --aggressive
-    - git push -u github master
+    - git push -u github master -f
   only:
     - master
     - tags
