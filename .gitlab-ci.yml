@@ -17,6 +17,7 @@ deploy_job:
     - git remote -v
     - git checkout master
     - git branch
+    - git pull github master
     - git push github master
   only:
     - master
