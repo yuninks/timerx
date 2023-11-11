@@ -8,6 +8,7 @@ deploy_job:
     - git remote -v
     - git log
     - git remote add github https://${GITHUB_TOKEN}:@github.com/yun-ink/timerx.git
+    - git remote -v
     - git push github master
   only:
     - master
