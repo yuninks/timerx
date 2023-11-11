@@ -16,7 +16,8 @@ deploy_job:
     - git remote add github git@github.com:yun-ink/timerx.git
     - git remote -v
     - git checkout master
-    - git fsck --full
+    #- git fsck --full
+    - git prune
     - git push -u github master
   only:
     - master
