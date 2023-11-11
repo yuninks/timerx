@@ -21,13 +21,11 @@ var timerMapMux sync.Mutex
 
 var timerCount int        // 当前定时数目
 var onceLimit sync.Once   // 实现单例
-var nextTime = time.Now() // 下一次执行的时间
 
-type ContextValueKey string // 定义context 传递的Key类型
 
-const (
-	extendParamKey ContextValueKey = "extend_param"
-)
+
+
+
 
 type single struct{}
 
@@ -181,9 +179,6 @@ func (s *single) iteratorTimer(ctx context.Context, nowTime time.Time) {
 
 	// fmt.Println("timer: one finish")
 }
-
-// 定义各个回调函数
-type callback func(ctx context.Context) bool
 
 // 定时器操作类
 // 这里不应painc

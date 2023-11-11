@@ -1,6 +1,9 @@
 package timer
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type timerStr struct {
 	Callback   callback        // 需要回调的方法
@@ -16,3 +19,12 @@ type timerStr struct {
 type ExtendParams struct {
 	Params map[string]interface{} // 带出去的参数
 }
+var nextTime = time.Now() // 下一次执行的时间
+
+type ContextValueKey string // 定义context 传递的Key类型
+const (
+	extendParamKey ContextValueKey = "extend_param"
+)
+
+// 定义各个回调函数
+type callback func(ctx context.Context) bool
