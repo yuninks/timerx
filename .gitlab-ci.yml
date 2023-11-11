@@ -1,13 +1,18 @@
 stages:
   - deploy
 
+before_script:
+  - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+  - eval $(ssh-agent -s)
+  - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+  - mkdir -p ~/.ssh
+  - chmod 700 ~/.ssh
+
 deploy_job:
   stage: deploy
   script:
-    - echo "$GITHUB_TOKEN" > /etc/ssl/certs/github_token.pem
-    - git config --global http.sslCAInfo /etc/ssl/certs/github_token.pem
     - git remote remove github || true
-    - git remote add github https://github.com/yun-ink/timerx.git
+    - git remote add github git@github.com:yun-ink/timerx.git
     - git remote -v
     - git checkout -b master
     - git branch
