@@ -14,13 +14,19 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
+// 功能描述
+// 这是基于Redis的定时任务调度器，能够有效的在服务集群里面调度任务，避免了单点压力过高或单点故障问题
+// 由于所有的服务代码是一致的，也就是一个定时任务将在所有的服务都有注册，具体调度到哪个服务运行看调度结果
+
+// 暂不支持删除定时器，因为这个定时器的设计是基于全局的，如果删除了，那么其他服务就不知道了
+
 // 单例模式
 var clusterOnceLimit sync.Once
 
 // 已注册的任务列表
 var clusterWorkerList sync.Map
 
-type cluster struct {
+type Cluster struct {
 	ctx     context.Context
 	redis   *redis.Client
 	lockKey string // 全局计算的key
@@ -29,14 +35,14 @@ type cluster struct {
 	listKey string // 可执行的任务列表的key
 }
 
-var clu *cluster = nil
+var clu *Cluster = nil
 
-func InitCluster(ctx context.Context, red *redis.Client) *cluster {
+func InitCluster(ctx context.Context, red *redis.Client) *Cluster {
 	clusterOnceLimit.Do(func() {
-		clu = &cluster{
+		clu = &Cluster{
 			ctx:     ctx,
 			redis:   red,
-			lockKey: "timer:cluster_globalLockKey",
+			lockKey: "timer:cluster_globalLockKey", // 定时器的全局锁
 			nextKey: "timer:cluster_nextKey",
 			zsetKey: "timer:cluster_zsetKey",
 			listKey: "timer:cluster_listKey",
@@ -63,7 +69,7 @@ func InitCluster(ctx context.Context, red *redis.Client) *cluster {
 	return clu
 }
 
-func (c *cluster) AddTimer(ctx context.Context, uniqueKey string, spaceTime time.Duration, callback callback, extend ExtendParams) error {
+func (c *Cluster) Add(ctx context.Context, uniqueKey string, spaceTime time.Duration, callback callback, extendData interface{}) error {
 	_, ok := clusterWorkerList.Load(uniqueKey)
 	if ok {
 		return errors.New("key已存在")
@@ -86,12 +92,12 @@ func (c *cluster) AddTimer(ctx context.Context, uniqueKey string, spaceTime time
 	nowTime := time.Now()
 
 	t := timerStr{
-		BeginTime: nowTime,
-		NextTime:  nowTime,
-		SpaceTime: spaceTime,
-		Callback:  callback,
-		Extend:    extend,
-		UniqueKey: uniqueKey,
+		BeginTime:  nowTime,
+		NextTime:   nowTime,
+		SpaceTime:  spaceTime,
+		Callback:   callback,
+		ExtendData: extendData,
+		UniqueKey:  uniqueKey,
 	}
 
 	clusterWorkerList.Store(uniqueKey, t)
@@ -119,7 +125,7 @@ func (c *cluster) AddTimer(ctx context.Context, uniqueKey string, spaceTime time
 }
 
 // 计算下一次执行的时间
-func (c *cluster) getNextTime() {
+func (c *Cluster) getNextTime() {
 
 	// log.Println("begin computer")
 	ctx, cancel := context.WithCancel(c.ctx)
@@ -184,31 +190,8 @@ func getNextExecTime(beforeTime time.Time, spaceTime time.Duration) time.Time {
 }
 
 // 获取任务
-func (c *cluster) getTask() {
+func (c *Cluster) getTask() {
 	// 定时去Redis获取任务
-	// zb := redis.ZRangeBy{
-	// 	Min: "0",
-	// 	Max: fmt.Sprintf("%+v", time.Now().UnixMilli()),
-	// }
-
-	// taskList, _ := c.redis.ZRangeByScore(c.ctx, c.zsetKey, &zb).Result()
-
-	// if len(taskList) == 0 {
-	// 	return
-	// }
-
-	// p := c.redis.Pipeline()
-
-	// for _, val := range taskList {
-	// 	// 添加到可执行队列
-	// 	p.LPush(c.ctx, c.listKey, val)
-	// 	// 删除有序集合
-	// 	p.ZRem(c.ctx, c.zsetKey, val)
-	// }
-	// _, err := p.Exec(c.ctx)
-	// // fmt.Println(err)
-	// _ = err
-
 	script := `
 	local token = redis.call('zrangebyscore',KEYS[1],ARGV[1],ARGV[2])
 	for i,v in ipairs(token) do
@@ -222,7 +205,7 @@ func (c *cluster) getTask() {
 }
 
 // 监听任务
-func (c *cluster) watch() {
+func (c *Cluster) watch() {
 	// 执行任务
 	for {
 		keys, err := c.redis.BLPop(c.ctx, time.Second*10, c.listKey).Result()
@@ -236,8 +219,6 @@ func (c *cluster) watch() {
 
 // 执行任务
 func doTask(ctx context.Context, red *redis.Client, taskId string) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	defer func() {
 		if err := recover(); err != nil {
@@ -262,8 +243,6 @@ func doTask(ctx context.Context, red *redis.Client, taskId string) {
 	}
 	defer lock.Unlock()
 
-	ctx = context.WithValue(ctx, extendParamKey, t.Extend)
-
 	// 执行任务
-	t.Callback(ctx)
+	t.Callback(ctx,t.ExtendData)
 }

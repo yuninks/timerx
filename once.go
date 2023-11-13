@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -11,25 +13,34 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
+// 功能描述
+// 1. 任务全局唯一
+// 2. 任务只执行一次
+// 3. 任务执行失败可以重新放入队列
+
 // 单次的任务队列
 type worker struct {
 	ctx     context.Context
 	zsetKey string
 	listKey string
 	redis   *redis.Client
-	worker  WorkerInterface
+	worker  Callback
 }
 
 type WorkerCode int
 
 const (
-	WorkerCodeSuccess WorkerCode = 0
-	WorkerCodeAgain   WorkerCode = -1
+	WorkerCodeSuccess WorkerCode = 0  // 处理完成(不需要重入)
+	WorkerCodeAgain   WorkerCode = -1 // 需要继续定时,默认原来的时间
 )
 
 // 需要考虑执行失败重新放入队列的情况
-type WorkerInterface interface {
-	Worker(uniqueKey string, jobType string, data map[string]interface{}) WorkerCode
+type Callback interface {
+	// 任务执行
+	// uniqueKey: 任务唯一标识
+	// jobType: 任务类型，用于区分任务
+	// data: 任务数据
+	Worker(uniqueKey string, jobType string, data interface{}) (WorkerCode, time.Duration)
 }
 
 var wo *worker = nil
@@ -37,21 +48,22 @@ var once sync.Once
 
 type extendData struct {
 	Delay time.Duration
-	Data  map[string]interface{}
+	Data  interface{}
 }
 
-func InitWorker(ctx context.Context, re *redis.Client, w WorkerInterface) *worker {
+// 初始化
+func InitOnce(ctx context.Context, re *redis.Client, w Callback) *worker {
 
 	once.Do(func() {
 		wo = &worker{
 			ctx:     ctx,
-			zsetKey: "timer:job_zsetkey",
-			listKey: "timer:job_listkey",
+			zsetKey: "timer:once_zsetkey",
+			listKey: "timer:once_listkey",
 			redis:   re,
 			worker:  w,
 		}
 		go wo.getTask()
-		go wo.execTask()
+		go wo.watch()
 	})
 
 	return wo
@@ -59,7 +71,7 @@ func InitWorker(ctx context.Context, re *redis.Client, w WorkerInterface) *worke
 
 // 添加任务
 // 重复插入就代表覆盖
-func (w *worker) Add(uniqueKey string, jobType string, delayTime time.Duration, data map[string]interface{}) error {
+func (w *worker) Add(uniqueKey string, jobType string, delayTime time.Duration, data interface{}) error {
 	if delayTime.Abs() != delayTime {
 		return fmt.Errorf("时间间隔不能为负数")
 	}
@@ -125,8 +137,8 @@ Loop:
 	}
 }
 
-// 执行任务
-func (w *worker) execTask() {
+// 监听任务
+func (w *worker) watch() {
 	for {
 		keys, err := w.redis.BLPop(w.ctx, time.Second*10, w.listKey).Result()
 		if err != nil {
@@ -134,26 +146,39 @@ func (w *worker) execTask() {
 			continue
 		}
 
-		go func() {
-			s := strings.Split(keys[1], "[:]")
+		go w.doTask(keys[1])
 
-			// 读取数据
-			str, err := w.redis.Get(w.ctx, keys[1]).Result()
-			if err != nil {
-				fmt.Println("execJob err:", err)
-				return
-			}
-			ed := extendData{}
-			json.Unmarshal([]byte(str), &ed)
+	}
+}
 
-			fmt.Println("开始时间：", time.Now().Format("2006-01-02 15:04:05"))
-			code := w.worker.Worker(s[0], s[1], ed.Data)
+func (w *worker) doTask(key string) {
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println("timer:定时器出错", err)
+			log.Println("errStack", string(debug.Stack()))
+		}
+	}()
 
-			if code == WorkerCodeAgain {
-				// 重新放入队列
-				fmt.Println("重入时间：", time.Now().Format("2006-01-02 15:04:05"))
-				w.Add(s[0], s[1], ed.Delay, ed.Data)
-			}
-		}()
+	s := strings.Split(key, "[:]")
+
+	// 读取数据
+	str, err := w.redis.Get(w.ctx, key).Result()
+	if err != nil {
+		fmt.Println("execJob err:", err)
+		return
+	}
+	ed := extendData{}
+	json.Unmarshal([]byte(str), &ed)
+
+	fmt.Println("开始时间：", time.Now().Format("2006-01-02 15:04:05"))
+	code, t := w.worker.Worker(s[0], s[1], ed.Data)
+
+	if code == WorkerCodeAgain {
+		// 重新放入队列
+		fmt.Println("重入时间：", time.Now().Format("2006-01-02 15:04:05"))
+		if t != 0 && t == t.Abs() {
+			ed.Delay = t
+		}
+		w.Add(s[0], s[1], ed.Delay, ed.Data)
 	}
 }

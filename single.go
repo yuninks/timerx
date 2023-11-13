@@ -14,27 +14,23 @@ import (
 
 // 定时器
 // 原理：每毫秒的时间触发
+// 单机版重复时间间隔定时器
 
 // uuid -> timerStr
 var timerMap = make(map[string]*timerStr)
 var timerMapMux sync.Mutex
 
-var timerCount int        // 当前定时数目
-var onceLimit sync.Once   // 实现单例
+var timerCount int      // 当前定时数目
+var onceLimit sync.Once // 实现单例
 
+type Single struct{}
 
-
-
-
-
-type single struct{}
-
-var sin *single = nil
+var sin *Single = nil
 
 // 定时器类
-func InitSingle(ctx context.Context) *single {
+func InitSingle(ctx context.Context) *Single {
 	onceLimit.Do(func() {
-		sin = &single{}
+		sin = &Single{}
 
 		timer := time.NewTicker(time.Millisecond * 200)
 		go func(ctx context.Context) {
@@ -47,7 +43,7 @@ func InitSingle(ctx context.Context) *single {
 						continue
 					}
 					// 迭代定时器
-					sin.iteratorTimer(ctx, t)
+					sin.iterator(ctx, t)
 					// fmt.Println("timer: 执行")
 				case <-ctx.Done():
 					// 跳出循环
@@ -62,7 +58,12 @@ func InitSingle(ctx context.Context) *single {
 }
 
 // 间隔定时器
-func (s *single) AddTimer(space time.Duration, call callback, extend ExtendParams) (int, error) {
+// @param space 间隔时间
+// @param call 回调函数
+// @param extend 附加参数
+// @return int 定时器索引
+// @return error 错误
+func (s *Single) Add(space time.Duration, call callback, extend interface{}) (int, error) {
 	timerMapMux.Lock()
 	defer timerMapMux.Unlock()
 
@@ -81,7 +82,7 @@ func (s *single) AddTimer(space time.Duration, call callback, extend ExtendParam
 		SpaceTime:  space,
 		CanRunning: make(chan struct{}, 1),
 		UniqueKey:  "",
-		Extend:     extend,
+		ExtendData: extend,
 	}
 
 	timerMap[fmt.Sprintf("%d", timerCount)] = &t
@@ -94,21 +95,15 @@ func (s *single) AddTimer(space time.Duration, call callback, extend ExtendParam
 	return timerCount, nil
 }
 
-// 添加需要定时的规则
-func (s *single) AddToTimer(space time.Duration, call callback) int {
-	extend := ExtendParams{}
-	count, _ := s.AddTimer(space, call, extend)
-	return count
-}
-
-func (s *single) DelToTimer(index string) {
+// 删除定时器
+func (s *Single) Del(index string) {
 	timerMapMux.Lock()
 	defer timerMapMux.Unlock()
 	delete(timerMap, index)
 }
 
 // 迭代定时器列表
-func (s *single) iteratorTimer(ctx context.Context, nowTime time.Time) {
+func (s *Single) iterator(ctx context.Context, nowTime time.Time) {
 	timerMapMux.Lock()
 	defer timerMapMux.Unlock()
 
@@ -157,7 +152,7 @@ func (s *single) iteratorTimer(ctx context.Context, nowTime time.Time) {
 						}
 					}()
 					// fmt.Printf("timer: 准备执行 %v %v \n", k, v.Tag)
-					s.timerAction(ctx, v.Callback, v.UniqueKey, v.Extend)
+					s.doTask(ctx, v.Callback, v.UniqueKey, v.ExtendData)
 				default:
 					// fmt.Printf("timer: 已在执行 %v %v \n", k, v.Tag)
 					return
@@ -182,28 +177,12 @@ func (s *single) iteratorTimer(ctx context.Context, nowTime time.Time) {
 
 // 定时器操作类
 // 这里不应painc
-func (s *single) timerAction(ctx context.Context, call callback, uniqueKey string, extend ExtendParams) bool {
+func (s *Single) doTask(ctx context.Context, call callback, uniqueKey string, extend interface{}) error {
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Println("timer:定时器出错", err)
 			log.Println("errStack", string(debug.Stack()))
 		}
 	}()
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	// 附加数据
-	ctx = context.WithValue(ctx, extendParamKey, extend)
-
-	return call(ctx)
-}
-
-// 快捷方法
-func GetExtendParams(ctx context.Context) (*ExtendParams, error) {
-	val := ctx.Value(extendParamKey)
-	params, ok := val.(ExtendParams)
-	if !ok {
-		return nil, errors.New("没找到参数")
-	}
-	return &params, nil
+	return call(ctx, extend)
 }

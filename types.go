@@ -12,13 +12,14 @@ type timerStr struct {
 	NextTime   time.Time       // [删]下一次执行的时间
 	SpaceTime  time.Duration   // 任务间隔时间
 	UniqueKey  string          // 全局唯一键
-	Extend     ExtendParams    // 附加参数
+	ExtendData interface{}     // 附加参数
 }
 
 // 扩展参数
-type ExtendParams struct {
-	Params map[string]interface{} // 带出去的参数
-}
+//
+//	type ExtendParams struct {
+//		Params map[string]interface{} // 带出去的参数
+//	}
 var nextTime = time.Now() // 下一次执行的时间
 
 type ContextValueKey string // 定义context 传递的Key类型
@@ -27,4 +28,4 @@ const (
 )
 
 // 定义各个回调函数
-type callback func(ctx context.Context) bool
+type callback func(ctx context.Context, extendData interface{}) error
