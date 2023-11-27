@@ -1,4 +1,4 @@
-package timer
+package timerx
 
 import (
 	"fmt"

@@ -1,4 +1,4 @@
-package timer
+package timerx
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"code.yun.ink/open/timer/lockx"
+	"code.yun.ink/pkg/lockx"
 	"github.com/go-redis/redis/v8"
 )
 

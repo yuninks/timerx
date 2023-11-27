@@ -1,4 +1,4 @@
-package timer_test
+package timerx_test
 
 import "testing"
 

@@ -1,4 +1,4 @@
-package timer
+package timerx
 
 import (
 	"context"
@@ -15,17 +15,9 @@ type timerStr struct {
 	ExtendData interface{}     // 附加参数
 }
 
-// 扩展参数
-//
-//	type ExtendParams struct {
-//		Params map[string]interface{} // 带出去的参数
-//	}
+
 var nextTime = time.Now() // 下一次执行的时间
 
-type ContextValueKey string // 定义context 传递的Key类型
-const (
-	extendParamKey ContextValueKey = "extend_param"
-)
 
 // 定义各个回调函数
 type callback func(ctx context.Context, extendData interface{}) error
