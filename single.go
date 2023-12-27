@@ -13,8 +13,7 @@ import (
 )
 
 // 定时器
-// 原理：每毫秒的时间触发
-// 单机版重复时间间隔定时器
+// 1. 这个定时器的作用范围是本机
 
 // uuid -> timerStr
 var timerMap = make(map[string]*timerStr)
