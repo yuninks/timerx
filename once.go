@@ -40,7 +40,7 @@ type Callback interface {
 	// uniqueKey: 任务唯一标识
 	// jobType: 任务类型，用于区分任务
 	// data: 任务数据
-	Worker(uniqueKey string, jobType string, data interface{}) (WorkerCode, time.Duration)
+	Worker(jobType string, uniqueKey string, data interface{}) (WorkerCode, time.Duration)
 }
 
 var wo *worker = nil
@@ -52,15 +52,15 @@ type extendData struct {
 }
 
 // 初始化
-func InitOnce(ctx context.Context, re *redis.Client, w Callback) *worker {
+func InitOnce(ctx context.Context, re *redis.Client, jobGlobalName string, jobCallback Callback) *worker {
 
 	once.Do(func() {
 		wo = &worker{
 			ctx:     ctx,
-			zsetKey: "timer:once_zsetkey",
-			listKey: "timer:once_listkey",
+			zsetKey: "timer:once_zsetkey" + jobGlobalName,
+			listKey: "timer:once_listkey" + jobGlobalName,
 			redis:   re,
-			worker:  w,
+			worker:  jobCallback,
 		}
 		go wo.getTask()
 		go wo.watch()
@@ -71,7 +71,7 @@ func InitOnce(ctx context.Context, re *redis.Client, w Callback) *worker {
 
 // 添加任务
 // 重复插入就代表覆盖
-func (w *worker) Add(uniqueKey string, jobType string, delayTime time.Duration, data interface{}) error {
+func (w *worker) Add(jobType string, uniqueKey string, delayTime time.Duration, data interface{}) error {
 	if delayTime.Abs() != delayTime {
 		return fmt.Errorf("时间间隔不能为负数")
 	}
@@ -79,7 +79,7 @@ func (w *worker) Add(uniqueKey string, jobType string, delayTime time.Duration, 
 		return fmt.Errorf("时间间隔不能为0")
 	}
 
-	redisKey := fmt.Sprintf("%s[:]%s", uniqueKey, jobType)
+	redisKey := fmt.Sprintf("%s[:]%s", jobType, uniqueKey)
 
 	ed := extendData{
 		Delay: delayTime,
@@ -101,8 +101,8 @@ func (w *worker) Add(uniqueKey string, jobType string, delayTime time.Duration, 
 }
 
 // 删除任务
-func (w *worker) Del(uniqueKey string, jobType string) error {
-	redisKey := fmt.Sprintf("%s[:]%s", uniqueKey, jobType)
+func (w *worker) Del(jobType string, uniqueKey string) error {
+	redisKey := fmt.Sprintf("%s[:]%s", jobType, uniqueKey)
 
 	w.redis.Del(w.ctx, redisKey).Result()
 
