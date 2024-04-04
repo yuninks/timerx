@@ -30,7 +30,7 @@ func main() {
 
 func worker() {
 	client := getRedis()
-	w := timerx.InitOnce(context.Background(), client,"test", &Worker{})
+	w := timerx.InitOnce(context.Background(), client, "test", &Worker{})
 	w.Add("test", "test", 1*time.Second, map[string]interface{}{
 		"test": "test",
 	})
@@ -52,11 +52,11 @@ func worker() {
 
 type Worker struct{}
 
-func (w *Worker) Worker(jobType string,uniqueKey string,  data interface{}) (timerx.WorkerCode, time.Duration) {
+func (w *Worker) Worker(jobType string, uniqueKey string, data interface{}) (timerx.WorkerCode, time.Duration) {
 	fmt.Println("执行时间:", time.Now().Format("2006-01-02 15:04:05"))
 	fmt.Println(uniqueKey, jobType)
 	fmt.Println(data)
-	return timerx.WorkerCodeAgain,time.Second
+	return timerx.WorkerCodeAgain, time.Second
 }
 
 func getRedis() *redis.Client {
@@ -76,7 +76,7 @@ func re() {
 	client := getRedis()
 
 	ctx := context.Background()
-	cl := timerx.InitCluster(ctx, client)
+	cl := timerx.InitCluster(ctx, client, "kkkk")
 	cl.Add(ctx, "test1", 1*time.Millisecond, aa, "data")
 	cl.Add(ctx, "test2", 1*time.Millisecond, aa, "data")
 	cl.Add(ctx, "test3", 1*time.Millisecond, aa, "data")

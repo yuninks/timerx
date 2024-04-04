@@ -80,7 +80,6 @@ func (s *Single) Add(space time.Duration, call callback, extend interface{}) (in
 		NextTime:   nowTime, // nowTime.Add(space), // 添加任务的时候就执行一次
 		SpaceTime:  space,
 		CanRunning: make(chan struct{}, 1),
-		UniqueKey:  "",
 		ExtendData: extend,
 	}
 
@@ -151,7 +150,7 @@ func (s *Single) iterator(ctx context.Context, nowTime time.Time) {
 						}
 					}()
 					// fmt.Printf("timer: 准备执行 %v %v \n", k, v.Tag)
-					s.doTask(ctx, v.Callback, v.UniqueKey, v.ExtendData)
+					s.doTask(ctx, v.Callback, v.ExtendData)
 				default:
 					// fmt.Printf("timer: 已在执行 %v %v \n", k, v.Tag)
 					return
@@ -176,7 +175,7 @@ func (s *Single) iterator(ctx context.Context, nowTime time.Time) {
 
 // 定时器操作类
 // 这里不应painc
-func (s *Single) doTask(ctx context.Context, call callback, uniqueKey string, extend interface{}) error {
+func (s *Single) doTask(ctx context.Context, call callback, extend interface{}) error {
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Println("timer:定时器出错", err)
