@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -22,14 +21,23 @@ var timerMapMux sync.Mutex
 var timerCount int      // 当前定时数目
 var onceLimit sync.Once // 实现单例
 
-type Single struct{}
+type Single struct {
+	ctx    context.Context
+	logger Logger
+}
 
 var sin *Single = nil
 
 // 定时器类
-func InitSingle(ctx context.Context) *Single {
+func InitSingle(ctx context.Context, opts ...Option) *Single {
 	onceLimit.Do(func() {
-		sin = &Single{}
+
+		op := newOptions(opts...)
+
+		sin = &Single{
+			ctx:    ctx,
+			logger: op.logger,
+		}
 
 		timer := time.NewTicker(time.Millisecond * 200)
 		go func(ctx context.Context) {
@@ -49,7 +57,7 @@ func InitSingle(ctx context.Context) *Single {
 					break Loop
 				}
 			}
-			log.Println("timer: initend")
+			sin.logger.Infof(ctx, "timer: initend")
 		}(ctx)
 	})
 
@@ -67,6 +75,7 @@ func (s *Single) Add(space time.Duration, call callback, extend interface{}) (in
 	defer timerMapMux.Unlock()
 
 	if space != space.Abs() {
+		s.logger.Errorf(s.ctx, "space must be positive")
 		return 0, errors.New("space must be positive")
 	}
 
@@ -178,8 +187,7 @@ func (s *Single) iterator(ctx context.Context, nowTime time.Time) {
 func (s *Single) doTask(ctx context.Context, call callback, extend interface{}) error {
 	defer func() {
 		if err := recover(); err != nil {
-			fmt.Println("timer:定时器出错", err)
-			log.Println("errStack", string(debug.Stack()))
+			s.logger.Errorf(ctx, "timer:定时器出错 err:%+v stack:%s", err, string(debug.Stack()))
 		}
 	}()
 	return call(ctx, extend)

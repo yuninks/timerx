@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -19,8 +18,6 @@ import (
 // 由于所有的服务代码是一致的，也就是一个定时任务将在所有的服务都有注册，具体调度到哪个服务运行看调度结果
 
 // 暂不支持删除定时器，因为这个定时器的设计是基于全局的，如果删除了，那么其他服务就不知道了
-
-// TODO:如果获取到任务不能处理的，应放回队列（因为可能新旧代码同时上线，新的添加了任务处理）
 
 // 单例模式
 var clusterOnceLimit sync.Once
@@ -208,7 +205,6 @@ func (c *Cluster) addJob(ctx context.Context, taskId string, beginTime time.Time
 // TODO:注册的任务需放在Redis集中存储，因为本地的话，如果有多个服务，那么就会出现不一致的情况。但是要注意服务如何进行下线，由于是主动上报的，需要有一个机制进行删除过期的任务（添加任务&定时器轮训注册）
 func (c *Cluster) getNextTime() {
 
-	// log.Println("begin computer")
 	ctx, cancel := context.WithCancel(c.ctx)
 	defer cancel()
 
@@ -294,12 +290,14 @@ func (c *Cluster) watch() {
 		for {
 			keys, err := c.redis.BLPop(c.ctx, time.Second*10, c.listKey).Result()
 			if err != nil {
-				fmt.Println("watch err:", err)
+				if err != redis.Nil {
+					c.logger.Errorf(c.ctx, "BLPop watch err:%+v", err)
+				}
 				continue
 			}
 			_, ok := clusterWorkerList.Load(keys[1])
 			if !ok {
-				fmt.Println("watch timer:任务不存在", keys[1])
+				c.logger.Errorf(c.ctx, "watch timer:任务不存在", keys[1])
 				c.redis.SAdd(c.ctx, c.setKey, keys[1])
 				continue
 			}
@@ -310,18 +308,18 @@ func (c *Cluster) watch() {
 	go func() {
 		for {
 			taskId, err := c.redis.SPop(c.ctx, c.setKey).Result()
-
 			if err != nil {
-				fmt.Println("watch err:", err)
 				if err == redis.Nil {
 					// 已经是空了就不要浪费资源了
 					time.Sleep(time.Second)
+				} else {
+					c.logger.Errorf(c.ctx, "SPop watch err:%+v", err)
 				}
 				continue
 			}
 			_, ok := clusterWorkerList.Load(taskId)
 			if !ok {
-				fmt.Println("watch timer:任务不存在", taskId)
+				c.logger.Errorf(c.ctx, "watch timer:任务不存在", taskId)
 				c.redis.SAdd(c.ctx, c.setKey, taskId)
 				continue
 			}
