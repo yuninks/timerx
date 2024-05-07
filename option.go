@@ -20,8 +20,16 @@ func newOptions(opts ...Option) Options {
 	return o
 }
 
+// 设置日志
 func SetLogger(log Logger) Option {
 	return func(o *Options) {
 		o.logger = log
+	}
+}
+
+// 设定时区
+func SetTimeZone(zone string) Option {
+	return func(o *Options) {
+		// todo
 	}
 }

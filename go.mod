@@ -1,4 +1,4 @@
-module code.yun.ink/pkg/timerx
+module github.com/yuninks/timerx
 
 go 1.19
 
