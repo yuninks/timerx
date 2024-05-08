@@ -19,8 +19,9 @@ import (
 // 3. 任务执行失败支持快捷重新加入队列
 
 // 单次的任务队列
-type worker struct {
+type Once struct {
 	ctx     context.Context
+	logger  Logger
 	zsetKey string
 	listKey string
 	redis   *redis.Client
@@ -43,7 +44,7 @@ type Callback interface {
 	Worker(jobType string, uniqueKey string, data interface{}) (WorkerCode, time.Duration)
 }
 
-var wo *worker = nil
+var wo *Once = nil
 var once sync.Once
 
 type extendData struct {
@@ -52,15 +53,16 @@ type extendData struct {
 }
 
 // 初始化
-func InitOnce(ctx context.Context, re *redis.Client, jobGlobalName string, jobCallback Callback) *worker {
-
+func InitOnce(ctx context.Context, re *redis.Client, keyPrefix string, call Callback, opts ...Option) *Once {
+	op := newOptions(opts...)
 	once.Do(func() {
-		wo = &worker{
+		wo = &Once{
 			ctx:     ctx,
-			zsetKey: "timer:once_zsetkey" + jobGlobalName,
-			listKey: "timer:once_listkey" + jobGlobalName,
+			logger:  op.logger,
+			zsetKey: "timer:once_zsetkey" + keyPrefix,
+			listKey: "timer:once_listkey" + keyPrefix,
 			redis:   re,
-			worker:  jobCallback,
+			worker:  call,
 		}
 		go wo.getTask()
 		go wo.watch()
@@ -71,7 +73,7 @@ func InitOnce(ctx context.Context, re *redis.Client, jobGlobalName string, jobCa
 
 // 添加任务
 // 重复插入就代表覆盖
-func (w *worker) Add(jobType string, uniqueKey string, delayTime time.Duration, data interface{}) error {
+func (w *Once) Add(jobType string, uniqueKey string, delayTime time.Duration, data interface{}) error {
 	if delayTime.Abs() != delayTime {
 		return fmt.Errorf("时间间隔不能为负数")
 	}
@@ -101,7 +103,7 @@ func (w *worker) Add(jobType string, uniqueKey string, delayTime time.Duration, 
 }
 
 // 删除任务
-func (w *worker) Del(jobType string, uniqueKey string) error {
+func (w *Once) Del(jobType string, uniqueKey string) error {
 	redisKey := fmt.Sprintf("%s[:]%s", jobType, uniqueKey)
 
 	w.redis.Del(w.ctx, redisKey).Result()
@@ -112,7 +114,7 @@ func (w *worker) Del(jobType string, uniqueKey string) error {
 }
 
 // 获取任务
-func (w *worker) getTask() {
+func (w *Once) getTask() {
 	timer := time.NewTicker(time.Millisecond * 200)
 	defer timer.Stop()
 
@@ -138,7 +140,7 @@ Loop:
 }
 
 // 监听任务
-func (w *worker) watch() {
+func (w *Once) watch() {
 	for {
 		keys, err := w.redis.BLPop(w.ctx, time.Second*10, w.listKey).Result()
 		if err != nil {
@@ -151,7 +153,8 @@ func (w *worker) watch() {
 	}
 }
 
-func (w *worker) doTask(key string) {
+// 执行任务
+func (w *Once) doTask(key string) {
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Println("timer:定时器出错", err)

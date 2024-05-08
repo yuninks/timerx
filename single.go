@@ -11,8 +11,9 @@ import (
 	"time"
 )
 
-// 定时器
+// 简单定时器
 // 1. 这个定时器的作用范围是本机
+// 2. 适用简单的时间间隔定时任务
 
 // uuid -> timerStr
 var timerMap = make(map[string]*timerStr)

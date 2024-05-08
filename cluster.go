@@ -48,11 +48,11 @@ func InitCluster(ctx context.Context, red *redis.Client, keyPrefix string, opts 
 			ctx:     ctx,
 			redis:   red,
 			logger:  op.logger,
-			lockKey: keyPrefix + "timer:cluster_globalLockKey", // 定时器的全局锁
-			nextKey: keyPrefix + "timer:cluster_nextKey",       // 下一次
-			zsetKey: keyPrefix + "timer:cluster_zsetKey",       // 有序集合
-			listKey: keyPrefix + "timer:cluster_listKey",       // 列表
-			setKey:  keyPrefix + "timer:cluster_setKey",        // 重入集合
+			lockKey: "timer:cluster_globalLockKey" + keyPrefix, // 定时器的全局锁
+			nextKey: "timer:cluster_nextKey" + keyPrefix,       // 下一次
+			zsetKey: "timer:cluster_zsetKey" + keyPrefix,       // 有序集合
+			listKey: "timer:cluster_listKey" + keyPrefix,       // 列表
+			setKey:  "timer:cluster_setKey" + keyPrefix,        // 重入集合
 		}
 
 		// 监听任务
@@ -228,6 +228,7 @@ func (c *Cluster) getNextTime() {
 
 	nowTime := time.Now()
 
+	// 根据内部注册的任务列表计算下一次执行的时间
 	clusterWorkerList.Range(func(key, value interface{}) bool {
 		val := value.(timerStr)
 		beforeTime := execTime[val.TaskId]
@@ -262,6 +263,8 @@ func getNextExecTime(ts timerStr) time.Time {
 	}
 	nextTime := ts.NextTime.Add(ts.SpaceTime)
 	ts.NextTime = nextTime
+
+	// 递归计算直到拿到下一次执行的时间
 	if nextTime.Before(nowTime) {
 		nextTime = getNextExecTime(ts)
 	}
@@ -305,6 +308,7 @@ func (c *Cluster) watch() {
 		}
 	}()
 
+	// 处理重入任务
 	go func() {
 		for {
 			taskId, err := c.redis.SPop(c.ctx, c.setKey).Result()

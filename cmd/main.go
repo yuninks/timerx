@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"code.yun.ink/pkg/timerx"
+	"github.com/yuninks/timerx"
 	"github.com/go-redis/redis/v8"
 )
 
