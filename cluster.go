@@ -2,7 +2,6 @@ package timerx
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"runtime/debug"
 	"sync"
@@ -26,11 +25,11 @@ var clusterOnceLimit sync.Once
 var clusterWorkerList sync.Map
 
 type Cluster struct {
-	ctx     context.Context
-	redis   *redis.Client
-	logger  Logger
+	ctx    context.Context
+	redis  *redis.Client
+	logger Logger
+
 	lockKey string // 全局计算的key
-	nextKey string // 下一次执行的key
 	zsetKey string // 有序集合的key
 	listKey string // 可执行的任务列表的key
 	setKey  string // 重入集合的key
@@ -41,15 +40,15 @@ var clu *Cluster = nil
 // 初始化定时器
 // 全局只需要初始化一次
 func InitCluster(ctx context.Context, red *redis.Client, keyPrefix string, opts ...Option) *Cluster {
-	op := newOptions(opts...)
 
 	clusterOnceLimit.Do(func() {
+		op := newOptions(opts...)
+
 		clu = &Cluster{
 			ctx:     ctx,
 			redis:   red,
 			logger:  op.logger,
 			lockKey: "timer:cluster_globalLockKey" + keyPrefix, // 定时器的全局锁
-			nextKey: "timer:cluster_nextKey" + keyPrefix,       // 下一次
 			zsetKey: "timer:cluster_zsetKey" + keyPrefix,       // 有序集合
 			listKey: "timer:cluster_listKey" + keyPrefix,       // 列表
 			setKey:  "timer:cluster_setKey" + keyPrefix,        // 重入集合
@@ -76,83 +75,131 @@ func InitCluster(ctx context.Context, red *redis.Client, keyPrefix string, opts 
 	return clu
 }
 
-// TODO:指定执行时间
-// 1.每月的1号2点执行（如果当月没有这个号就不执行）
-// 2.每周的周一2点执行
-// 3.每天的2点执行
-// 4.每小时的2分执行
-// 5.每分钟的2秒执行
-func (c *Cluster) AddEveryMonth(ctx context.Context, taskId string, day int, hour int, minute int, second int, callback callback, extendData interface{}) error {
+// 每月执行一次
+// @param ctx 上下文
+// @param taskId 任务ID
+// @param day 每月的几号
+// @param hour 小时
+// @param minute 分钟
+// @param second 秒
+// @param callback 回调函数
+// @param extendData 扩展数据
+// @return error
+func (c *Cluster) AddMonth(ctx context.Context, taskId string, day int, hour int, minute int, second int, callback callback, extendData interface{}) error {
 	nowTime := time.Now()
-	// 计算下一次执行的时间
-	nextTime := time.Date(nowTime.Year(), nowTime.Month(), day, hour, minute, second, 0, nowTime.Location())
-	if nextTime.Before(nowTime) {
-		nextTime = nextTime.AddDate(0, 1, 0)
+
+	jobData := JobData{
+		JobType:    JobTypeEveryMonth,
+		CreateTime: nowTime,
+		Day:        day,
+		Hour:       hour,
+		Minute:     minute,
+		Second:     second,
 	}
-	return c.addJob(ctx, taskId, nextTime, time.Hour*24*30, callback, extendData, JobTypeEveryMonth, &JobData{Day: &day, Hour: &hour, Minute: &minute, Second: &second})
+
+	return c.addJob(ctx, taskId, jobData, callback, extendData)
 }
 
-func (c *Cluster) AddEveryWeek(ctx context.Context, taskId string, week time.Weekday, hour int, minute int, second int, callback callback, extendData interface{}) error {
+// 每周执行一次
+// @param ctx context.Context 上下文
+// @param taskId string 任务ID
+// @param week time.Weekday 周
+// @param hour int 小时
+// @param minute int 分钟
+// @param second int 秒
+func (c *Cluster) AddWeek(ctx context.Context, taskId string, week time.Weekday, hour int, minute int, second int, callback callback, extendData interface{}) error {
 	nowTime := time.Now()
-	// 计算下一次执行的时间
-	nextTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), hour, minute, second, 0, nowTime.Location())
-	for nextTime.Weekday() != week {
-		nextTime = nextTime.AddDate(0, 0, 1)
+
+	jobData := JobData{
+		JobType:    JobTypeEveryMonth,
+		CreateTime: nowTime,
+		Weekday:    week,
+		Hour:       hour,
+		Minute:     minute,
+		Second:     second,
 	}
-	if nextTime.Before(nowTime) {
-		nextTime = nextTime.AddDate(0, 0, 7)
-	}
-	return c.addJob(ctx, taskId, nextTime, time.Hour*24*7, callback, extendData, JobTypeInterval, nil)
+
+	return c.addJob(ctx, taskId, jobData, callback, extendData)
 }
 
-func (c *Cluster) AddEveryDay(ctx context.Context, taskId string, hour int, minute int, second int, callback callback, extendData interface{}) error {
+// 每天执行一次
+func (c *Cluster) AddDay(ctx context.Context, taskId string, hour int, minute int, second int, callback callback, extendData interface{}) error {
 	nowTime := time.Now()
-	// 计算下一次执行的时间
-	nextTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), hour, minute, second, 0, nowTime.Location())
-	if nextTime.Before(nowTime) {
-		nextTime = nextTime.AddDate(0, 0, 1)
+
+	jobData := JobData{
+		JobType:    JobTypeEveryMonth,
+		CreateTime: nowTime,
+		Hour:       hour,
+		Minute:     minute,
+		Second:     second,
 	}
-	return c.addJob(ctx, taskId, nextTime, time.Hour*24, callback, extendData, JobTypeInterval, nil)
+
+	return c.addJob(ctx, taskId, jobData, callback, extendData)
 }
 
-func (c *Cluster) AddEveryHour(ctx context.Context, taskId string, minute int, second int, callback callback, extendData interface{}) error {
+// 每小时执行一次
+func (c *Cluster) AddHour(ctx context.Context, taskId string, minute int, second int, callback callback, extendData interface{}) error {
 	nowTime := time.Now()
-	// 计算下一次执行的时间
-	nextTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), nowTime.Hour(), minute, second, 0, nowTime.Location())
-	if nextTime.Before(nowTime) {
-		nextTime = nextTime.Add(time.Hour)
+
+	jobData := JobData{
+		JobType:    JobTypeEveryMonth,
+		CreateTime: nowTime,
+		Minute:     minute,
+		Second:     second,
 	}
-	return c.addJob(ctx, taskId, nextTime, time.Hour, callback, extendData, JobTypeInterval, nil)
+
+	return c.addJob(ctx, taskId, jobData, callback, extendData)
 }
 
-func (c *Cluster) AddEveryMinute(ctx context.Context, taskId string, second int, callback callback, extendData interface{}) error {
+// 每分钟执行一次
+func (c *Cluster) AddMinute(ctx context.Context, taskId string, second int, callback callback, extendData interface{}) error {
 	nowTime := time.Now()
-	// 计算下一次执行的时间
-	nextTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), nowTime.Hour(), nowTime.Minute(), second, 0, nowTime.Location())
-	if nextTime.Before(nowTime) {
-		nextTime = nextTime.Add(time.Minute)
+
+	jobData := JobData{
+		JobType:    JobTypeEveryMonth,
+		CreateTime: nowTime,
+		Second:     second,
 	}
-	return c.addJob(ctx, taskId, nextTime, time.Minute, callback, extendData, JobTypeInterval, nil)
+
+	return c.addJob(ctx, taskId, jobData, callback, extendData)
 }
 
-func (c *Cluster) Add(ctx context.Context, taskId string, spaceTime time.Duration, callback callback, extendData interface{}) error {
-	return c.addJob(ctx, taskId, time.Now(), spaceTime, callback, extendData, JobTypeInterval, nil)
+// 特定时间间隔
+func (c *Cluster) AddSpace(ctx context.Context, taskId string, spaceTime time.Duration, callback callback, extendData interface{}) error {
+	nowTime := time.Now()
+
+	if spaceTime < 0 {
+		c.logger.Errorf(ctx, "间隔时间不能小于0")
+		return errors.New("间隔时间不能小于0")
+	}
+
+	jobData := JobData{
+		JobType:      JobTypeEveryMonth,
+		CreateTime:   nowTime,
+		IntervalTime: spaceTime,
+	}
+
+	return c.addJob(ctx, taskId, jobData, callback, extendData)
 }
 
-// 指定时间间隔
-// TODO:
-// 1.不同服务定的时间间隔不一致问题
-// 2.后起的服务计算了时间覆盖前面原有的时间问题
-func (c *Cluster) addJob(ctx context.Context, taskId string, beginTime time.Time, spaceTime time.Duration, callback callback, extendData interface{}, jobType JobType, jobData *JobData) error {
+// 统一添加任务
+// @param ctx context.Context 上下文
+// @param taskId string 任务ID
+// @param jobData *JobData 任务数据
+// @param callback callback 回调函数
+// @param extendData interface{} 扩展数据
+// @return error
+func (c *Cluster) addJob(ctx context.Context, taskId string, jobData JobData, callback callback, extendData interface{}) error {
 	_, ok := clusterWorkerList.Load(taskId)
 	if ok {
 		c.logger.Errorf(ctx, "key已存在:%s", taskId)
 		return errors.New("key已存在")
 	}
 
-	if spaceTime != spaceTime.Abs() {
-		c.logger.Errorf(ctx, "时间间隔不能为负数:%s", taskId)
-		return errors.New("时间间隔不能为负数")
+	_, err := GetNextTime(time.Now(), time.Local, jobData)
+	if err != nil {
+		c.logger.Errorf(ctx, "获取下次执行时间失败:%s", err.Error())
+		return err
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -167,42 +214,20 @@ func (c *Cluster) addJob(ctx context.Context, taskId string, beginTime time.Time
 	defer lock.Unlock()
 
 	t := timerStr{
-		BeginTime:  beginTime,
-		NextTime:   beginTime,
-		SpaceTime:  spaceTime,
 		Callback:   callback,
 		ExtendData: extendData,
 		TaskId:     taskId,
-		JobType:    jobType,
-		JobData:    jobData,
+		JobData:    &jobData,
 	}
 
 	clusterWorkerList.Store(taskId, t)
-
-	cacheStr, _ := c.redis.Get(ctx, c.nextKey).Result()
-	execTime := make(map[string]time.Time)
-	json.Unmarshal([]byte(cacheStr), &execTime)
-
-	p := c.redis.Pipeline()
-
-	p.ZAdd(ctx, c.zsetKey, &redis.Z{
-		Score:  float64(nextTime.UnixMilli()),
-		Member: taskId,
-	})
-	execTime[taskId] = nextTime
-	n, _ := json.Marshal(execTime)
-	// fmt.Println("execTime:", execTime, string(n))
-	p.Set(ctx, c.nextKey, string(n), 0)
-
-	_, err := p.Exec(ctx)
-
-	// fmt.Println("添加", err)
 
 	return err
 }
 
 // 计算下一次执行的时间
 // TODO:注册的任务需放在Redis集中存储，因为本地的话，如果有多个服务，那么就会出现不一致的情况。但是要注意服务如何进行下线，由于是主动上报的，需要有一个机制进行删除过期的任务（添加任务&定时器轮训注册）
+// TODO:考虑不同实例系统时间不一样，可能计算的下次时间不一致，会有重复执行的可能
 func (c *Cluster) getNextTime() {
 
 	ctx, cancel := context.WithCancel(c.ctx)
@@ -219,24 +244,13 @@ func (c *Cluster) getNextTime() {
 
 	// 计算下一次时间
 
-	// 读取执行的缓存
-	cacheStr, _ := c.redis.Get(ctx, c.nextKey).Result()
-	execTime := make(map[string]time.Time)
-	json.Unmarshal([]byte(cacheStr), &execTime)
-
 	p := c.redis.Pipeline()
-
-	nowTime := time.Now()
 
 	// 根据内部注册的任务列表计算下一次执行的时间
 	clusterWorkerList.Range(func(key, value interface{}) bool {
 		val := value.(timerStr)
-		beforeTime := execTime[val.TaskId]
-		if beforeTime.After(nowTime) {
-			return true
-		}
-		nextTime := getNextExecTime(val)
-		execTime[val.TaskId] = nextTime
+
+		nextTime, _ := GetNextTime(time.Now(), time.Local, *val.JobData)
 
 		p.ZAdd(ctx, c.zsetKey, &redis.Z{
 			Score:  float64(nextTime.UnixMilli()),
@@ -246,29 +260,8 @@ func (c *Cluster) getNextTime() {
 		return true
 	})
 
-	// 更新缓存
-	b, _ := json.Marshal(execTime)
-	p.Set(ctx, c.nextKey, string(b), 0)
-
 	_, err := p.Exec(ctx)
 	_ = err
-}
-
-// 递归遍历获取执行时间
-// TODO:需要根据不同的任务类型计算下次定时时间
-func getNextExecTime(ts timerStr) time.Time {
-	nowTime := time.Now()
-	if ts.NextTime.After(nowTime) {
-		return ts.NextTime
-	}
-	nextTime := ts.NextTime.Add(ts.SpaceTime)
-	ts.NextTime = nextTime
-
-	// 递归计算直到拿到下一次执行的时间
-	if nextTime.Before(nowTime) {
-		nextTime = getNextExecTime(ts)
-	}
-	return nextTime
 }
 
 // 获取任务

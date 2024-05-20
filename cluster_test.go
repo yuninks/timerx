@@ -30,7 +30,7 @@ func TestCluster_AddEveryMonth(t *testing.T) {
 	}
 	extendData := "testData"
 
-	err := cluster.AddEveryMonth(ctx, taskId, 1, hour, minute, second, callback, extendData)
+	err := cluster.AddMonth(ctx, taskId, 1, hour, minute, second, callback, extendData)
 	if err != nil {
 		t.Errorf("AddEveryMonth failed, err: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestCluster_AddEveryWeek(t *testing.T) {
 	}
 	extendData := "testData"
 
-	err := cluster.AddEveryWeek(ctx, taskId, week, hour, minute, second, callback, extendData)
+	err := cluster.AddWeek(ctx, taskId, week, hour, minute, second, callback, extendData)
 	if err != nil {
 		t.Errorf("AddEveryWeek failed, err: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestCluster_AddEveryDay(t *testing.T) {
 	}
 	extendData := "testData"
 
-	err := cluster.AddEveryDay(ctx, taskId, hour, minute, second, callback, extendData)
+	err := cluster.AddDay(ctx, taskId, hour, minute, second, callback, extendData)
 	if err != nil {
 		t.Errorf("AddEveryDay failed, err: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestCluster_AddEveryHour(t *testing.T) {
 	}
 	extendData := "testData"
 
-	err := cluster.AddEveryHour(ctx, taskId, minute, second, callback, extendData)
+	err := cluster.AddHour(ctx, taskId, minute, second, callback, extendData)
 	if err != nil {
 		t.Errorf("AddEveryHour failed, err: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestCluster_AddEveryMinute(t *testing.T) {
 	}
 	extendData := "testData"
 
-	err := cluster.AddEveryMinute(ctx, taskId, second, callback, extendData)
+	err := cluster.AddMinute(ctx, taskId, second, callback, extendData)
 	if err != nil {
 		t.Errorf("AddEveryMinute failed, err: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestCluster_Add(t *testing.T) {
 	}
 	extendData := "testData"
 
-	err := cluster.Add(ctx, taskId, dur, callback, extendData)
+	err := cluster.AddSpace(ctx, taskId, dur, callback, extendData)
 	if err != nil {
 		t.Errorf("Add failed, err: %v", err)
 	}

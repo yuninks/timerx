@@ -77,12 +77,12 @@ func re() {
 
 	ctx := context.Background()
 	cl := timerx.InitCluster(ctx, client, "kkkk")
-	cl.Add(ctx, "test1", 1*time.Millisecond, aa, "data")
-	cl.Add(ctx, "test2", 1*time.Millisecond, aa, "data")
-	cl.Add(ctx, "test3", 1*time.Millisecond, aa, "data")
-	cl.Add(ctx, "test4", 1*time.Millisecond, aa, "data")
-	cl.Add(ctx, "test5", 1*time.Millisecond, aa, "data")
-	cl.Add(ctx, "test6", 1*time.Millisecond, aa, "data")
+	cl.AddSpace(ctx, "test1", 1*time.Millisecond, aa, "data")
+	cl.AddSpace(ctx, "test2", 1*time.Millisecond, aa, "data")
+	cl.AddSpace(ctx, "test3", 1*time.Millisecond, aa, "data")
+	cl.AddSpace(ctx, "test4", 1*time.Millisecond, aa, "data")
+	cl.AddSpace(ctx, "test5", 1*time.Millisecond, aa, "data")
+	cl.AddSpace(ctx, "test6", 1*time.Millisecond, aa, "data")
 
 	select {}
 }
