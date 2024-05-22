@@ -3,8 +3,9 @@ module github.com/yuninks/timerx
 go 1.19
 
 require (
-	code.yun.ink/pkg/lockx v1.0.0
 	github.com/go-redis/redis/v8 v8.11.5
+	github.com/yuninks/cachex v1.0.5
+	github.com/yuninks/lockx v1.0.1
 )
 
 require (

@@ -8,7 +8,7 @@ import (
 // 计算该任务下次执行时间
 // @param job *JobData 任务数据
 // @return time.Time 下次执行时间
-func GetNextTime(t time.Time,loc *time.Location, job JobData) (*time.Time, error) {
+func GetNextTime(t time.Time, loc *time.Location, job JobData) (*time.Time, error) {
 
 	var next time.Time
 
@@ -34,8 +34,8 @@ func GetNextTime(t time.Time,loc *time.Location, job JobData) (*time.Time, error
 
 func calculateNextInterval(t time.Time, job JobData) time.Time {
 	// 从创建的时候开始计算
-	cycle := t.Sub(job.CreateTime).Microseconds() / job.IntervalTime.Microseconds()
-	return job.CreateTime.Add(job.IntervalTime * time.Duration(cycle+1))
+	cycle := t.Sub(job.BaseTime).Microseconds() / job.IntervalTime.Microseconds()
+	return job.BaseTime.Add(job.IntervalTime * time.Duration(cycle+1))
 }
 
 func calculateNextMonthTime(t time.Time, job JobData, loc *time.Location) time.Time {

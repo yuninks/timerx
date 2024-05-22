@@ -28,6 +28,7 @@ const (
 type JobData struct {
 	JobType      JobType       // 任务类型
 	NextTime     time.Time     // 下次执行时间
+	BaseTime     time.Time     // 基准时间(间隔的基准时间)
 	CreateTime   time.Time     // 任务创建时间
 	IntervalTime time.Duration // 任务间隔时间
 	Month        time.Month    // 每年的第几个月

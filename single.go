@@ -103,7 +103,7 @@ func (c *Single) AddWeek(ctx context.Context, taskId string, week time.Weekday, 
 	nowTime := time.Now()
 
 	jobData := JobData{
-		JobType:    JobTypeEveryMonth,
+		JobType:    JobTypeEveryWeek,
 		CreateTime: nowTime,
 		Weekday:    week,
 		Hour:       hour,
@@ -119,7 +119,7 @@ func (c *Single) AddDay(ctx context.Context, taskId string, hour int, minute int
 	nowTime := time.Now()
 
 	jobData := JobData{
-		JobType:    JobTypeEveryMonth,
+		JobType:    JobTypeEveryDay,
 		CreateTime: nowTime,
 		Hour:       hour,
 		Minute:     minute,
@@ -134,7 +134,7 @@ func (c *Single) AddHour(ctx context.Context, taskId string, minute int, second 
 	nowTime := time.Now()
 
 	jobData := JobData{
-		JobType:    JobTypeEveryMonth,
+		JobType:    JobTypeEveryHour,
 		CreateTime: nowTime,
 		Minute:     minute,
 		Second:     second,
@@ -148,7 +148,7 @@ func (c *Single) AddMinute(ctx context.Context, taskId string, second int, callb
 	nowTime := time.Now()
 
 	jobData := JobData{
-		JobType:    JobTypeEveryMonth,
+		JobType:    JobTypeEveryMinute,
 		CreateTime: nowTime,
 		Second:     second,
 	}
@@ -166,7 +166,7 @@ func (c *Single) AddSpace(ctx context.Context, taskId string, spaceTime time.Dur
 	}
 
 	jobData := JobData{
-		JobType:      JobTypeEveryMonth,
+		JobType:      JobTypeInterval,
 		CreateTime:   nowTime,
 		IntervalTime: spaceTime,
 	}
