@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/yuninks/cachex v1.0.5
-	github.com/yuninks/lockx v1.0.1
+	github.com/yuninks/lockx v1.0.2
 )
 
 require (
