@@ -240,10 +240,7 @@ func (c *Cluster) addJob(ctx context.Context, taskId string, jobData JobData, ca
 // TODO:考虑不同实例系统时间不一样，可能计算的下次时间不一致，会有重复执行的可能
 func (c *Cluster) getNextTime() {
 
-	ctx, cancel := context.WithCancel(c.ctx)
-	defer cancel()
-
-	lock := lockx.NewGlobalLock(ctx, c.redis, c.lockKey)
+	lock := lockx.NewGlobalLock(c.ctx, c.redis, c.lockKey)
 	// 获取锁
 	lockBool := lock.Lock()
 	if !lockBool {
@@ -294,7 +291,7 @@ func (c *Cluster) getNextTime() {
 		// TODO:
 		expireTime := time.Minute
 
-		res, err := c.redis.Eval(ctx, script, []string{c.zsetKey}, cacheKey, expireTime.Seconds(), nextTime.UnixMilli(), val.TaskId).Result()
+		res, err := c.redis.Eval(c.ctx, script, []string{c.zsetKey}, cacheKey, expireTime.Seconds(), nextTime.UnixMilli(), val.TaskId).Result()
 
 		if err == nil && res.(string) == "SUCCESS" {
 			// 设置成功
@@ -373,11 +370,8 @@ func (c *Cluster) watch() {
 // 执行任务
 func (c *Cluster) doTask(ctx context.Context, taskId string) {
 
-	defer func() {
-		if err := recover(); err != nil {
-			c.logger.Errorf(ctx, "timer:定时器出错 err:%+v stack:%s", err, string(debug.Stack()))
-		}
-	}()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	val, ok := clusterWorkerList.Load(taskId)
 	if !ok {
@@ -394,6 +388,12 @@ func (c *Cluster) doTask(ctx context.Context, taskId string) {
 		return
 	}
 	defer lock.Unlock()
+
+	defer func() {
+		if err := recover(); err != nil {
+			c.logger.Errorf(ctx, "timer:定时器出错 err:%+v stack:%s", err, string(debug.Stack()))
+		}
+	}()
 
 	// 执行任务
 	t.Callback(ctx, t.ExtendData)
