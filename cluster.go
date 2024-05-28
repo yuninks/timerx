@@ -263,12 +263,21 @@ func (c *Cluster) getNextTime() {
 		// fmt.Println(val.ExtendData, val.JobData, nextTime)
 
 		// 内部判定是否重复
-		cacheKey := fmt.Sprintf("%s_%s_%d", c.keyPrefix, val.TaskId, nextTime.Unix())
-		_, err := c.cache.Get(cacheKey)
+		cacheKey := fmt.Sprintf("%s_%s_%d", c.keyPrefix, val.TaskId, nextTime.UnixMilli())
+		cacheVal, err := c.cache.Get(cacheKey)
 		if err == nil {
 			// 缓存已有值
 			return true
 		}
+		valueNum := int(0)
+		if cacheVal != nil {
+			valueNum = cacheVal.(int)
+		}
+		if valueNum > 2 {
+			// 重试2次还是失败就不执行了
+			return true
+		}
+		// fmt.Println("计算时间1", val.ExtendData, time.UnixMilli(nextTime.UnixMilli()).Format("2006-01-02 15:04:05"))
 
 		// redis lua脚本，尝试设置nx锁时间为一分钟，如果能设置进去则添加到有序集合zsetKey
 		script := `
@@ -294,10 +303,16 @@ func (c *Cluster) getNextTime() {
 
 		res, err := c.redis.Eval(c.ctx, script, []string{c.zsetKey}, cacheKey, expireTime.Seconds(), nextTime.UnixMilli(), val.TaskId).Result()
 
+		valueNum++
+
 		if err == nil && res.(string) == "SUCCESS" {
 			// 设置成功
-			c.cache.Set(cacheKey, "", expireTime)
+			valueNum = 10
+
+			// fmt.Println("计算时间2", val.ExtendData, time.UnixMilli(nextTime.UnixMilli()).Format("2006-01-02 15:04:05"))
 		}
+
+		c.cache.Set(cacheKey, valueNum, expireTime)
 
 		return true
 	})
