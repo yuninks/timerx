@@ -166,7 +166,7 @@ func (w *Once) watch() {
 func (w *Once) doTask(key string) {
 	defer func() {
 		if err := recover(); err != nil {
-			fmt.Println("timer:定时器出错", err)
+			fmt.Println("timer:回调任务panic", err)
 			log.Println("errStack", string(debug.Stack()))
 		}
 	}()

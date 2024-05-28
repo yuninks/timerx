@@ -437,7 +437,7 @@ func (c *Cluster) doTask(ctx context.Context, taskId string) {
 
 	defer func() {
 		if err := recover(); err != nil {
-			c.logger.Errorf(ctx, "timer:定时器出错 err:%+v stack:%s", err, string(debug.Stack()))
+			c.logger.Errorf(ctx, "timer:回调任务panic err:%+v stack:%s", err, string(debug.Stack()))
 		}
 	}()
 

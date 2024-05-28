@@ -282,7 +282,7 @@ func (s *Single) iterator(ctx context.Context, nowTime time.Time) {
 func (s *Single) doTask(ctx context.Context, call callback, extend interface{}) error {
 	defer func() {
 		if err := recover(); err != nil {
-			s.logger.Errorf(ctx, "timer:定时器出错 err:%+v stack:%s", err, string(debug.Stack()))
+			s.logger.Errorf(ctx, "timer:回调任务panic err:%+v stack:%s", err, string(debug.Stack()))
 		}
 	}()
 
