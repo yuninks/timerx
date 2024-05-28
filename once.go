@@ -19,11 +19,12 @@ import (
 // 3. 任务执行失败支持快捷重新加入队列
 
 // 单次的任务队列
-type worker struct {
+type Once struct {
 	ctx     context.Context
+	logger  Logger
 	zsetKey string
 	listKey string
-	redis   *redis.Client
+	redis   redis.UniversalClient
 	worker  Callback
 }
 
@@ -37,13 +38,15 @@ const (
 // 需要考虑执行失败重新放入队列的情况
 type Callback interface {
 	// 任务执行
-	// uniqueKey: 任务唯一标识
-	// jobType: 任务类型，用于区分任务
-	// data: 任务数据
-	Worker(jobType string, uniqueKey string, data interface{}) (WorkerCode, time.Duration)
+	// @param jobType string 任务类型
+	// @param uniTaskId string 任务唯一标识
+	// @param data interface{} 任务数据
+	// @return WorkerCode 任务执行结果
+	// @return time.Duration 任务执行时间间隔
+	Worker(jobType string, uniTaskId string, attachData interface{}) (WorkerCode, time.Duration)
 }
 
-var wo *worker = nil
+var wo *Once = nil
 var once sync.Once
 
 type extendData struct {
@@ -52,15 +55,16 @@ type extendData struct {
 }
 
 // 初始化
-func InitOnce(ctx context.Context, re *redis.Client, jobGlobalName string, jobCallback Callback) *worker {
-
+func InitOnce(ctx context.Context, re *redis.Client, keyPrefix string, call Callback, opts ...Option) *Once {
+	op := newOptions(opts...)
 	once.Do(func() {
-		wo = &worker{
+		wo = &Once{
 			ctx:     ctx,
-			zsetKey: "timer:once_zsetkey" + jobGlobalName,
-			listKey: "timer:once_listkey" + jobGlobalName,
+			logger:  op.logger,
+			zsetKey: "timer:once_zsetkey" + keyPrefix,
+			listKey: "timer:once_listkey" + keyPrefix,
 			redis:   re,
-			worker:  jobCallback,
+			worker:  call,
 		}
 		go wo.getTask()
 		go wo.watch()
@@ -71,7 +75,11 @@ func InitOnce(ctx context.Context, re *redis.Client, jobGlobalName string, jobCa
 
 // 添加任务
 // 重复插入就代表覆盖
-func (w *worker) Add(jobType string, uniqueKey string, delayTime time.Duration, data interface{}) error {
+// @param jobType string 任务类型
+// @param uniTaskId string 任务唯一标识
+// @param delayTime time.Duration 延迟时间
+// @param attachData interface{} 附加数据
+func (w *Once) Add(jobType string, uniTaskId string, delayTime time.Duration, attachData interface{}) error {
 	if delayTime.Abs() != delayTime {
 		return fmt.Errorf("时间间隔不能为负数")
 	}
@@ -79,19 +87,21 @@ func (w *worker) Add(jobType string, uniqueKey string, delayTime time.Duration, 
 		return fmt.Errorf("时间间隔不能为0")
 	}
 
-	redisKey := fmt.Sprintf("%s[:]%s", jobType, uniqueKey)
+	redisKey := fmt.Sprintf("%s[:]%s", jobType, uniTaskId)
 
 	ed := extendData{
 		Delay: delayTime,
-		Data:  data,
+		Data:  attachData,
 	}
 	b, _ := json.Marshal(ed)
 
+	// 写入附加数据
 	_, err := w.redis.SetEX(w.ctx, redisKey, b, delayTime+time.Second*5).Result()
 	if err != nil {
 		return err
 	}
 
+	// 吸入执行时间
 	_, err = w.redis.ZAdd(w.ctx, w.zsetKey, &redis.Z{
 		Score:  float64(time.Now().Add(delayTime).UnixMilli()),
 		Member: redisKey,
@@ -101,8 +111,8 @@ func (w *worker) Add(jobType string, uniqueKey string, delayTime time.Duration, 
 }
 
 // 删除任务
-func (w *worker) Del(jobType string, uniqueKey string) error {
-	redisKey := fmt.Sprintf("%s[:]%s", jobType, uniqueKey)
+func (w *Once) Del(jobType string, uniTaskId string) error {
+	redisKey := fmt.Sprintf("%s[:]%s", jobType, uniTaskId)
 
 	w.redis.Del(w.ctx, redisKey).Result()
 
@@ -112,7 +122,7 @@ func (w *worker) Del(jobType string, uniqueKey string) error {
 }
 
 // 获取任务
-func (w *worker) getTask() {
+func (w *Once) getTask() {
 	timer := time.NewTicker(time.Millisecond * 200)
 	defer timer.Stop()
 
@@ -138,7 +148,7 @@ Loop:
 }
 
 // 监听任务
-func (w *worker) watch() {
+func (w *Once) watch() {
 	for {
 		keys, err := w.redis.BLPop(w.ctx, time.Second*10, w.listKey).Result()
 		if err != nil {
@@ -151,7 +161,8 @@ func (w *worker) watch() {
 	}
 }
 
-func (w *worker) doTask(key string) {
+// 执行任务
+func (w *Once) doTask(key string) {
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Println("timer:定时器出错", err)

@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"runtime/debug"
 	"sync"
 	"time"
 
-	"code.yun.ink/pkg/lockx"
 	"github.com/go-redis/redis/v8"
+	"github.com/yuninks/cachex"
+	"github.com/yuninks/lockx"
 )
 
 // 功能描述
@@ -26,11 +28,13 @@ var clusterOnceLimit sync.Once
 var clusterWorkerList sync.Map
 
 type Cluster struct {
-	ctx     context.Context
-	redis   *redis.Client
-	logger  Logger
+	ctx       context.Context
+	redis     redis.UniversalClient
+	cache     *cachex.Cache
+	logger    Logger
+	keyPrefix string // key前缀
+
 	lockKey string // 全局计算的key
-	nextKey string // 下一次执行的key
 	zsetKey string // 有序集合的key
 	listKey string // 可执行的任务列表的key
 	setKey  string // 重入集合的key
@@ -40,19 +44,21 @@ var clu *Cluster = nil
 
 // 初始化定时器
 // 全局只需要初始化一次
-func InitCluster(ctx context.Context, red *redis.Client, keyPrefix string, opts ...Option) *Cluster {
-	op := newOptions(opts...)
+func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix string, opts ...Option) *Cluster {
 
 	clusterOnceLimit.Do(func() {
+		op := newOptions(opts...)
+
 		clu = &Cluster{
-			ctx:     ctx,
-			redis:   red,
-			logger:  op.logger,
-			lockKey: keyPrefix + "timer:cluster_globalLockKey", // 定时器的全局锁
-			nextKey: keyPrefix + "timer:cluster_nextKey",       // 下一次
-			zsetKey: keyPrefix + "timer:cluster_zsetKey",       // 有序集合
-			listKey: keyPrefix + "timer:cluster_listKey",       // 列表
-			setKey:  keyPrefix + "timer:cluster_setKey",        // 重入集合
+			ctx:       ctx,
+			redis:     red,
+			cache:     cachex.NewCache(),
+			logger:    op.logger,
+			keyPrefix: keyPrefix,
+			lockKey:   "timer:cluster_globalLockKey" + keyPrefix, // 定时器的全局锁
+			zsetKey:   "timer:cluster_zsetKey" + keyPrefix,       // 有序集合
+			listKey:   "timer:cluster_listKey" + keyPrefix,       // 列表
+			setKey:    "timer:cluster_setKey" + keyPrefix,        // 重入集合
 		}
 
 		// 监听任务
@@ -60,7 +66,7 @@ func InitCluster(ctx context.Context, red *redis.Client, keyPrefix string, opts 
 
 		timer := time.NewTicker(time.Millisecond * 200)
 
-		go func(ctx context.Context, red *redis.Client) {
+		go func(ctx context.Context) {
 		Loop:
 			for {
 				select {
@@ -71,95 +77,147 @@ func InitCluster(ctx context.Context, red *redis.Client, keyPrefix string, opts 
 					break Loop
 				}
 			}
-		}(ctx, red)
+		}(ctx)
 	})
 	return clu
 }
 
-// TODO:指定执行时间
-// 1.每月的1号2点执行（如果当月没有这个号就不执行）
-// 2.每周的周一2点执行
-// 3.每天的2点执行
-// 4.每小时的2分执行
-// 5.每分钟的2秒执行
-func (c *Cluster) AddEveryMonth(ctx context.Context, taskId string, day int, hour int, minute int, second int, callback callback, extendData interface{}) error {
+// 每月执行一次
+// @param ctx 上下文
+// @param taskId 任务ID
+// @param day 每月的几号
+// @param hour 小时
+// @param minute 分钟
+// @param second 秒
+// @param callback 回调函数
+// @param extendData 扩展数据
+// @return error
+func (c *Cluster) AddMonth(ctx context.Context, taskId string, day int, hour int, minute int, second int, callback callback, extendData interface{}) error {
 	nowTime := time.Now()
-	// 计算下一次执行的时间
-	nextTime := time.Date(nowTime.Year(), nowTime.Month(), day, hour, minute, second, 0, nowTime.Location())
-	if nextTime.Before(nowTime) {
-		nextTime = nextTime.AddDate(0, 1, 0)
+
+	jobData := JobData{
+		JobType:    JobTypeEveryMonth,
+		CreateTime: nowTime,
+		Day:        day,
+		Hour:       hour,
+		Minute:     minute,
+		Second:     second,
 	}
-	return c.addJob(ctx, taskId, nextTime, time.Hour*24*30, callback, extendData, JobTypeEveryMonth, &JobData{Day: &day, Hour: &hour, Minute: &minute, Second: &second})
+
+	return c.addJob(ctx, taskId, jobData, callback, extendData)
 }
 
-func (c *Cluster) AddEveryWeek(ctx context.Context, taskId string, week time.Weekday, hour int, minute int, second int, callback callback, extendData interface{}) error {
+// 每周执行一次
+// @param ctx context.Context 上下文
+// @param taskId string 任务ID
+// @param week time.Weekday 周
+// @param hour int 小时
+// @param minute int 分钟
+// @param second int 秒
+func (c *Cluster) AddWeek(ctx context.Context, taskId string, week time.Weekday, hour int, minute int, second int, callback callback, extendData interface{}) error {
 	nowTime := time.Now()
-	// 计算下一次执行的时间
-	nextTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), hour, minute, second, 0, nowTime.Location())
-	for nextTime.Weekday() != week {
-		nextTime = nextTime.AddDate(0, 0, 1)
+
+	jobData := JobData{
+		JobType:    JobTypeEveryWeek,
+		CreateTime: nowTime,
+		Weekday:    week,
+		Hour:       hour,
+		Minute:     minute,
+		Second:     second,
 	}
-	if nextTime.Before(nowTime) {
-		nextTime = nextTime.AddDate(0, 0, 7)
-	}
-	return c.addJob(ctx, taskId, nextTime, time.Hour*24*7, callback, extendData, JobTypeInterval, nil)
+
+	return c.addJob(ctx, taskId, jobData, callback, extendData)
 }
 
-func (c *Cluster) AddEveryDay(ctx context.Context, taskId string, hour int, minute int, second int, callback callback, extendData interface{}) error {
+// 每天执行一次
+func (c *Cluster) AddDay(ctx context.Context, taskId string, hour int, minute int, second int, callback callback, extendData interface{}) error {
 	nowTime := time.Now()
-	// 计算下一次执行的时间
-	nextTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), hour, minute, second, 0, nowTime.Location())
-	if nextTime.Before(nowTime) {
-		nextTime = nextTime.AddDate(0, 0, 1)
+
+	jobData := JobData{
+		JobType:    JobTypeEveryDay,
+		CreateTime: nowTime,
+		Hour:       hour,
+		Minute:     minute,
+		Second:     second,
 	}
-	return c.addJob(ctx, taskId, nextTime, time.Hour*24, callback, extendData, JobTypeInterval, nil)
+
+	return c.addJob(ctx, taskId, jobData, callback, extendData)
 }
 
-func (c *Cluster) AddEveryHour(ctx context.Context, taskId string, minute int, second int, callback callback, extendData interface{}) error {
+// 每小时执行一次
+func (c *Cluster) AddHour(ctx context.Context, taskId string, minute int, second int, callback callback, extendData interface{}) error {
 	nowTime := time.Now()
-	// 计算下一次执行的时间
-	nextTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), nowTime.Hour(), minute, second, 0, nowTime.Location())
-	if nextTime.Before(nowTime) {
-		nextTime = nextTime.Add(time.Hour)
+
+	jobData := JobData{
+		JobType:    JobTypeEveryHour,
+		CreateTime: nowTime,
+		Minute:     minute,
+		Second:     second,
 	}
-	return c.addJob(ctx, taskId, nextTime, time.Hour, callback, extendData, JobTypeInterval, nil)
+
+	return c.addJob(ctx, taskId, jobData, callback, extendData)
 }
 
-func (c *Cluster) AddEveryMinute(ctx context.Context, taskId string, second int, callback callback, extendData interface{}) error {
+// 每分钟执行一次
+func (c *Cluster) AddMinute(ctx context.Context, taskId string, second int, callback callback, extendData interface{}) error {
 	nowTime := time.Now()
-	// 计算下一次执行的时间
-	nextTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), nowTime.Hour(), nowTime.Minute(), second, 0, nowTime.Location())
-	if nextTime.Before(nowTime) {
-		nextTime = nextTime.Add(time.Minute)
+
+	jobData := JobData{
+		JobType:    JobTypeEveryMinute,
+		CreateTime: nowTime,
+		Second:     second,
 	}
-	return c.addJob(ctx, taskId, nextTime, time.Minute, callback, extendData, JobTypeInterval, nil)
+
+	return c.addJob(ctx, taskId, jobData, callback, extendData)
 }
 
-func (c *Cluster) Add(ctx context.Context, taskId string, spaceTime time.Duration, callback callback, extendData interface{}) error {
-	return c.addJob(ctx, taskId, time.Now(), spaceTime, callback, extendData, JobTypeInterval, nil)
+// 特定时间间隔
+func (c *Cluster) AddSpace(ctx context.Context, taskId string, spaceTime time.Duration, callback callback, extendData interface{}) error {
+	nowTime := time.Now()
+
+	if spaceTime < 0 {
+		c.logger.Errorf(ctx, "间隔时间不能小于0")
+		return errors.New("间隔时间不能小于0")
+	}
+
+	// 获取当天的零点时间
+	zeroTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), 0, 0, 0, 0, nowTime.Location())
+
+	jobData := JobData{
+		JobType:      JobTypeInterval,
+		BaseTime:     zeroTime, // 默认当天的零点
+		CreateTime:   nowTime,
+		IntervalTime: spaceTime,
+	}
+
+	return c.addJob(ctx, taskId, jobData, callback, extendData)
 }
 
-// 指定时间间隔
-// TODO:
-// 1.不同服务定的时间间隔不一致问题
-// 2.后起的服务计算了时间覆盖前面原有的时间问题
-func (c *Cluster) addJob(ctx context.Context, taskId string, beginTime time.Time, spaceTime time.Duration, callback callback, extendData interface{}, jobType JobType, jobData *JobData) error {
+// 统一添加任务
+// @param ctx context.Context 上下文
+// @param taskId string 任务ID
+// @param jobData *JobData 任务数据
+// @param callback callback 回调函数
+// @param extendData interface{} 扩展数据
+// @return error
+func (c *Cluster) addJob(ctx context.Context, taskId string, jobData JobData, callback callback, extendData interface{}) error {
 	_, ok := clusterWorkerList.Load(taskId)
 	if ok {
 		c.logger.Errorf(ctx, "key已存在:%s", taskId)
 		return errors.New("key已存在")
 	}
 
-	if spaceTime != spaceTime.Abs() {
-		c.logger.Errorf(ctx, "时间间隔不能为负数:%s", taskId)
-		return errors.New("时间间隔不能为负数")
+	_, err := GetNextTime(time.Now(), time.Local, jobData)
+	if err != nil {
+		c.logger.Errorf(ctx, "获取下次执行时间失败:%s", err.Error())
+		return err
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	lock := lockx.NewGlobalLock(ctx, c.redis, taskId)
-	tB := lock.Try(10)
+	tB := lock.Try(2)
 	if !tB {
 		c.logger.Errorf(ctx, "添加失败:%s", taskId)
 		return errors.New("添加失败")
@@ -167,48 +225,23 @@ func (c *Cluster) addJob(ctx context.Context, taskId string, beginTime time.Time
 	defer lock.Unlock()
 
 	t := timerStr{
-		BeginTime:  beginTime,
-		NextTime:   beginTime,
-		SpaceTime:  spaceTime,
 		Callback:   callback,
 		ExtendData: extendData,
 		TaskId:     taskId,
-		JobType:    jobType,
-		JobData:    jobData,
+		JobData:    &jobData,
 	}
 
 	clusterWorkerList.Store(taskId, t)
-
-	cacheStr, _ := c.redis.Get(ctx, c.nextKey).Result()
-	execTime := make(map[string]time.Time)
-	json.Unmarshal([]byte(cacheStr), &execTime)
-
-	p := c.redis.Pipeline()
-
-	p.ZAdd(ctx, c.zsetKey, &redis.Z{
-		Score:  float64(nextTime.UnixMilli()),
-		Member: taskId,
-	})
-	execTime[taskId] = nextTime
-	n, _ := json.Marshal(execTime)
-	// fmt.Println("execTime:", execTime, string(n))
-	p.Set(ctx, c.nextKey, string(n), 0)
-
-	_, err := p.Exec(ctx)
-
-	// fmt.Println("添加", err)
 
 	return err
 }
 
 // 计算下一次执行的时间
 // TODO:注册的任务需放在Redis集中存储，因为本地的话，如果有多个服务，那么就会出现不一致的情况。但是要注意服务如何进行下线，由于是主动上报的，需要有一个机制进行删除过期的任务（添加任务&定时器轮训注册）
+// TODO:考虑不同实例系统时间不一样，可能计算的下次时间不一致，会有重复执行的可能
 func (c *Cluster) getNextTime() {
 
-	ctx, cancel := context.WithCancel(c.ctx)
-	defer cancel()
-
-	lock := lockx.NewGlobalLock(ctx, c.redis, c.lockKey)
+	lock := lockx.NewGlobalLock(c.ctx, c.redis, c.lockKey)
 	// 获取锁
 	lockBool := lock.Lock()
 	if !lockBool {
@@ -219,53 +252,58 @@ func (c *Cluster) getNextTime() {
 
 	// 计算下一次时间
 
-	// 读取执行的缓存
-	cacheStr, _ := c.redis.Get(ctx, c.nextKey).Result()
-	execTime := make(map[string]time.Time)
-	json.Unmarshal([]byte(cacheStr), &execTime)
+	// p := c.redis.Pipeline()
 
-	p := c.redis.Pipeline()
-
-	nowTime := time.Now()
-
+	// 根据内部注册的任务列表计算下一次执行的时间
 	clusterWorkerList.Range(func(key, value interface{}) bool {
 		val := value.(timerStr)
-		beforeTime := execTime[val.TaskId]
-		if beforeTime.After(nowTime) {
+
+		nextTime, _ := GetNextTime(time.Now(), time.Local, *val.JobData)
+
+		// fmt.Println(val.ExtendData, val.JobData, nextTime)
+
+		// 内部判定是否重复
+		cacheKey := fmt.Sprintf("%s_%s_%d", c.keyPrefix, val.TaskId, nextTime.Unix())
+		_, err := c.cache.Get(cacheKey)
+		if err == nil {
+			// 缓存已有值
 			return true
 		}
-		nextTime := getNextExecTime(val)
-		execTime[val.TaskId] = nextTime
 
-		p.ZAdd(ctx, c.zsetKey, &redis.Z{
-			Score:  float64(nextTime.UnixMilli()),
-			Member: val.TaskId,
-		})
-		// log.Println("computeTime add", c.zsetKey, val.taskId, nextTime.UnixMilli())
+		// redis lua脚本，尝试设置nx锁时间为一分钟，如果能设置进去则添加到有序集合zsetKey
+		script := `
+		local zsetKey = KEYS[1]
+
+		local cacheKey = ARGV[1]
+		local expireTime = ARGV[2]
+	
+		local score = ARGV[3]
+		local member = ARGV[4]
+	
+		local res = redis.call('set', cacheKey, '', 'nx', 'ex', expireTime)
+	
+		if res then
+			redis.call('zadd', zsetKey, score, member)
+			return "SUCCESS"
+		end
+		return "ERROR"
+		`
+
+		// TODO:
+		expireTime := time.Minute
+
+		res, err := c.redis.Eval(c.ctx, script, []string{c.zsetKey}, cacheKey, expireTime.Seconds(), nextTime.UnixMilli(), val.TaskId).Result()
+
+		if err == nil && res.(string) == "SUCCESS" {
+			// 设置成功
+			c.cache.Set(cacheKey, "", expireTime)
+		}
+
 		return true
 	})
 
-	// 更新缓存
-	b, _ := json.Marshal(execTime)
-	p.Set(ctx, c.nextKey, string(b), 0)
-
-	_, err := p.Exec(ctx)
-	_ = err
-}
-
-// 递归遍历获取执行时间
-// TODO:需要根据不同的任务类型计算下次定时时间
-func getNextExecTime(ts timerStr) time.Time {
-	nowTime := time.Now()
-	if ts.NextTime.After(nowTime) {
-		return ts.NextTime
-	}
-	nextTime := ts.NextTime.Add(ts.SpaceTime)
-	ts.NextTime = nextTime
-	if nextTime.Before(nowTime) {
-		nextTime = getNextExecTime(ts)
-	}
-	return nextTime
+	// _, err := p.Exec(ctx)
+	// _ = err
 }
 
 // 获取任务
@@ -297,17 +335,25 @@ func (c *Cluster) watch() {
 			}
 			_, ok := clusterWorkerList.Load(keys[1])
 			if !ok {
-				c.logger.Errorf(c.ctx, "watch timer:任务不存在", keys[1])
-				c.redis.SAdd(c.ctx, c.setKey, keys[1])
+				c.logger.Errorf(c.ctx, "watch timer:任务不存在%+v", keys[1])
+
+				rd := ReJobData{
+					TaskId: keys[1],
+					Times:  1,
+				}
+				rdb, _ := json.Marshal(rd)
+
+				c.redis.SAdd(c.ctx, c.setKey, string(rdb))
 				continue
 			}
-			go c.doTask(c.ctx, c.redis, keys[1])
+			go c.doTask(c.ctx, keys[1])
 		}
 	}()
 
+	// 处理重入任务
 	go func() {
 		for {
-			taskId, err := c.redis.SPop(c.ctx, c.setKey).Result()
+			res, err := c.redis.SPop(c.ctx, c.setKey).Result()
 			if err != nil {
 				if err == redis.Nil {
 					// 已经是空了就不要浪费资源了
@@ -317,42 +363,67 @@ func (c *Cluster) watch() {
 				}
 				continue
 			}
-			_, ok := clusterWorkerList.Load(taskId)
-			if !ok {
-				c.logger.Errorf(c.ctx, "watch timer:任务不存在", taskId)
-				c.redis.SAdd(c.ctx, c.setKey, taskId)
+
+			var rd ReJobData
+			err = json.Unmarshal([]byte(res), &rd)
+			if err != nil {
+				c.logger.Errorf(c.ctx, "json.Unmarshal err:%+v", err)
 				continue
 			}
-			go c.doTask(c.ctx, c.redis, taskId)
+
+			_, ok := clusterWorkerList.Load(rd.TaskId)
+			if !ok {
+				c.logger.Errorf(c.ctx, "watch timer:任务不存在%+v", rd.TaskId)
+
+				if rd.Times >= 3 {
+					// 重试3次还是失败就不执行了
+					continue
+				}
+				rd.Times++
+
+				rdb, _ := json.Marshal(rd)
+
+				c.redis.SAdd(c.ctx, c.setKey, string(rdb))
+				continue
+			}
+			go c.doTask(c.ctx, rd.TaskId)
 		}
 	}()
 
 }
 
+type ReJobData struct {
+	TaskId string
+	Times  int
+}
+
 // 执行任务
-func (c *Cluster) doTask(ctx context.Context, red *redis.Client, taskId string) {
+func (c *Cluster) doTask(ctx context.Context, taskId string) {
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	val, ok := clusterWorkerList.Load(taskId)
+	if !ok {
+		c.logger.Errorf(ctx, "doTask timer:任务不存在:%s", taskId)
+		return
+	}
+	t := val.(timerStr)
+
+	// 这里加一个全局锁
+	lock := lockx.NewGlobalLock(ctx, c.redis, taskId)
+	tB := lock.Lock()
+	if !tB {
+		c.logger.Errorf(ctx, "doTask timer:获取锁失败:%s", taskId)
+		return
+	}
+	defer lock.Unlock()
 
 	defer func() {
 		if err := recover(); err != nil {
 			c.logger.Errorf(ctx, "timer:定时器出错 err:%+v stack:%s", err, string(debug.Stack()))
 		}
 	}()
-
-	val, ok := clusterWorkerList.Load(taskId)
-	if !ok {
-		c.logger.Errorf(ctx, "doTask timer:任务不存在", taskId)
-		return
-	}
-	t := val.(timerStr)
-
-	// 这里加一个全局锁
-	lock := lockx.NewGlobalLock(ctx, red, taskId)
-	tB := lock.Lock()
-	if !tB {
-		c.logger.Errorf(ctx, "doTask timer:获取锁失败", taskId)
-		return
-	}
-	defer lock.Unlock()
 
 	// 执行任务
 	t.Callback(ctx, t.ExtendData)

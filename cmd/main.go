@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"code.yun.ink/pkg/timerx"
 	"github.com/go-redis/redis/v8"
+	"github.com/yuninks/timerx"
 )
 
 func main() {
@@ -24,8 +24,24 @@ func main() {
 
 	// re()
 	// d()
-	worker()
+	cluster()
 
+	select {}
+
+}
+
+func cluster() {
+	client := getRedis()
+	ctx := context.Background()
+	cluster := timerx.InitCluster(ctx, client, "test")
+	err := cluster.AddSpace(ctx, "test_space", 1*time.Second, aa, "这是秒任务")
+	fmt.Println(err)
+	err = cluster.AddMinute(ctx, "test_min", 15, aa, "这是分钟任务")
+	fmt.Println(err)
+	err = cluster.AddHour(ctx, "test_hour", 30, 0, aa, "这是小时任务")
+	fmt.Println(err)
+	err = cluster.AddDay(ctx, "test_day", 11, 0, 0, aa, "这是天任务")
+	fmt.Println(err)
 }
 
 func worker() {
@@ -77,12 +93,12 @@ func re() {
 
 	ctx := context.Background()
 	cl := timerx.InitCluster(ctx, client, "kkkk")
-	cl.Add(ctx, "test1", 1*time.Millisecond, aa, "data")
-	cl.Add(ctx, "test2", 1*time.Millisecond, aa, "data")
-	cl.Add(ctx, "test3", 1*time.Millisecond, aa, "data")
-	cl.Add(ctx, "test4", 1*time.Millisecond, aa, "data")
-	cl.Add(ctx, "test5", 1*time.Millisecond, aa, "data")
-	cl.Add(ctx, "test6", 1*time.Millisecond, aa, "data")
+	cl.AddSpace(ctx, "test1", 1*time.Millisecond, aa, "data")
+	cl.AddSpace(ctx, "test2", 1*time.Millisecond, aa, "data")
+	cl.AddSpace(ctx, "test3", 1*time.Millisecond, aa, "data")
+	cl.AddSpace(ctx, "test4", 1*time.Millisecond, aa, "data")
+	cl.AddSpace(ctx, "test5", 1*time.Millisecond, aa, "data")
+	cl.AddSpace(ctx, "test6", 1*time.Millisecond, aa, "data")
 
 	select {}
 }
@@ -90,7 +106,7 @@ func re() {
 func aa(ctx context.Context, data interface{}) error {
 	fmt.Println("执行时间:", time.Now().Format("2006-01-02 15:04:05"))
 	fmt.Println(data)
-	time.Sleep(time.Second * 5)
+	// time.Sleep(time.Second * 5)
 	return nil
 }
 
