@@ -78,8 +78,8 @@ func (w *Worker) Worker(jobType string, uniqueKey string, data interface{}) (tim
 func getRedis() *redis.Client {
 	client := redis.NewClient(&redis.Options{
 		Addr:     "127.0.0.1" + ":" + "6379",
-		Password: "", // no password set
-		DB:       0,  // use default DB
+		Password: "123456", // no password set
+		DB:       0,        // use default DB
 	})
 	if client == nil {
 		panic("redis init error")
@@ -104,8 +104,8 @@ func re() {
 }
 
 func aa(ctx context.Context, data interface{}) error {
-	fmt.Println("执行时间:", time.Now().Format("2006-01-02 15:04:05"))
-	fmt.Println(data)
+	fmt.Println("-执行时间:", data, time.Now().Format("2006-01-02 15:04:05"))
+	// fmt.Println(data)
 	// time.Sleep(time.Second * 5)
 	return nil
 }
