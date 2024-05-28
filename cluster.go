@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	uuid "github.com/satori/go.uuid"
 	"github.com/yuninks/cachex"
 	"github.com/yuninks/lockx"
 )
@@ -439,6 +440,8 @@ func (c *Cluster) doTask(ctx context.Context, taskId string) {
 			c.logger.Errorf(ctx, "timer:定时器出错 err:%+v stack:%s", err, string(debug.Stack()))
 		}
 	}()
+
+	ctx = context.WithValue(ctx, "trace_id", uuid.NewV4().String)
 
 	// 执行任务
 	t.Callback(ctx, t.ExtendData)

@@ -8,6 +8,8 @@ import (
 	"runtime/debug"
 	"sync"
 	"time"
+
+	uuid "github.com/satori/go.uuid"
 )
 
 // 简单定时器
@@ -283,5 +285,8 @@ func (s *Single) doTask(ctx context.Context, call callback, extend interface{}) 
 			s.logger.Errorf(ctx, "timer:定时器出错 err:%+v stack:%s", err, string(debug.Stack()))
 		}
 	}()
+
+	ctx = context.WithValue(ctx, "trace_id", uuid.NewV4().String)
+
 	return call(ctx, extend)
 }

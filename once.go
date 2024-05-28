@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	uuid "github.com/satori/go.uuid"
 )
 
 // 功能描述
@@ -43,7 +44,7 @@ type Callback interface {
 	// @param data interface{} 任务数据
 	// @return WorkerCode 任务执行结果
 	// @return time.Duration 任务执行时间间隔
-	Worker(jobType string, uniTaskId string, attachData interface{}) (WorkerCode, time.Duration)
+	Worker(ctx context.Context, jobType string, uniTaskId string, attachData interface{}) (WorkerCode, time.Duration)
 }
 
 var wo *Once = nil
@@ -182,7 +183,10 @@ func (w *Once) doTask(key string) {
 	json.Unmarshal([]byte(str), &ed)
 
 	fmt.Println("开始时间：", time.Now().Format("2006-01-02 15:04:05"))
-	code, t := w.worker.Worker(s[0], s[1], ed.Data)
+
+	ctx := context.WithValue(context.Background(), "trace_id", uuid.NewV4().String)
+
+	code, t := w.worker.Worker(ctx, s[0], s[1], ed.Data)
 
 	if code == WorkerCodeAgain {
 		// 重新放入队列
