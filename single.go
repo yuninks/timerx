@@ -24,8 +24,9 @@ var singleTimerIndex int // 当前定时数目
 var singleOnceLimit sync.Once // 实现单例
 
 type Single struct {
-	ctx    context.Context
-	logger Logger
+	ctx      context.Context
+	logger   Logger
+	location *time.Location
 }
 
 var sin *Single = nil
@@ -40,8 +41,9 @@ func InitSingle(ctx context.Context, opts ...Option) *Single {
 		op := newOptions(opts...)
 
 		sin = &Single{
-			ctx:    ctx,
-			logger: op.logger,
+			ctx:      ctx,
+			logger:   op.logger,
+			location: op.location,
 		}
 
 		timer := time.NewTicker(time.Millisecond * 200)
@@ -55,7 +57,7 @@ func InitSingle(ctx context.Context, opts ...Option) *Single {
 						continue
 					}
 					// 迭代定时器
-					sin.iterator(ctx, t)
+					sin.iterator(ctx)
 					// fmt.Println("timer: 执行")
 				case <-ctx.Done():
 					// 跳出循环
@@ -185,9 +187,7 @@ func (c *Single) AddSpace(ctx context.Context, taskId string, spaceTime time.Dur
 func (l *Single) addJob(ctx context.Context, jobData JobData, call callback, extend interface{}) (int, error) {
 	singleTimerIndex += 1
 
-	nowTime := time.Now()
-
-	_, err := GetNextTime(nowTime, time.Local, jobData)
+	_, err := GetNextTime(time.Now().In(l.location), jobData)
 	if err != nil {
 		l.logger.Errorf(ctx, "获取下次执行时间失败:%s", err.Error())
 		return 0, err
@@ -211,7 +211,9 @@ func (s *Single) Del(index int) {
 }
 
 // 迭代定时器列表
-func (s *Single) iterator(ctx context.Context, nowTime time.Time) {
+func (s *Single) iterator(ctx context.Context) {
+
+	nowTime := time.Now().In(s.location)
 
 	// 默认5秒后（如果没有值就暂停进来5秒）
 	newNextTime := nowTime.Add(time.Second * 5)
@@ -223,7 +225,7 @@ func (s *Single) iterator(ctx context.Context, nowTime time.Time) {
 
 		if timeStr.JobData.NextTime.Before(nowTime) || timeStr.JobData.NextTime.Equal(nowTime) {
 			// 可执行
-			nextTime, _ := GetNextTime(nowTime, time.Local, *timeStr.JobData)
+			nextTime, _ := GetNextTime(nowTime, *timeStr.JobData)
 			timeStr.JobData.NextTime = *nextTime
 
 			if index == 1 {

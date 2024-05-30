@@ -1,12 +1,16 @@
 package timerx
 
+import "time"
+
 type Options struct {
-	logger Logger
+	logger   Logger
+	location *time.Location
 }
 
 func defaultOptions() Options {
 	return Options{
-		logger: NewLogger(),
+		logger:   NewLogger(),
+		location: time.Local,
 	}
 }
 
@@ -28,8 +32,8 @@ func SetLogger(log Logger) Option {
 }
 
 // 设定时区
-func SetTimeZone(zone string) Option {
+func SetTimeZone(zone *time.Location) Option {
 	return func(o *Options) {
-		// todo
+		o.location = zone
 	}
 }

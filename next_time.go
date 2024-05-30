@@ -8,21 +8,21 @@ import (
 // 计算该任务下次执行时间
 // @param job *JobData 任务数据
 // @return time.Time 下次执行时间
-func GetNextTime(t time.Time, loc *time.Location, job JobData) (*time.Time, error) {
+func GetNextTime(t time.Time, job JobData) (*time.Time, error) {
 
 	var next time.Time
 
 	switch job.JobType {
 	case JobTypeEveryMonth:
-		next = calculateNextMonthTime(t, job, loc)
+		next = calculateNextMonthTime(t, job)
 	case JobTypeEveryWeek:
-		next = calculateNextWeekTime(t, job, loc)
+		next = calculateNextWeekTime(t, job)
 	case JobTypeEveryDay:
-		next = calculateNextDayTime(t, job, loc)
+		next = calculateNextDayTime(t, job)
 	case JobTypeEveryHour:
-		next = calculateNextHourTime(t, job, loc)
+		next = calculateNextHourTime(t, job)
 	case JobTypeEveryMinute:
-		next = calculateNextMinuteTime(t, job, loc)
+		next = calculateNextMinuteTime(t, job)
 	case JobTypeInterval:
 		next = calculateNextInterval(t, job)
 	default:
@@ -38,16 +38,17 @@ func calculateNextInterval(t time.Time, job JobData) time.Time {
 	return job.BaseTime.Add(job.IntervalTime * time.Duration(cycle+1))
 }
 
-func calculateNextMonthTime(t time.Time, job JobData, loc *time.Location) time.Time {
+func calculateNextMonthTime(t time.Time, job JobData) time.Time {
 	// 判断是否可执行并返回下一个执行时间
+
 	if canRun(t, job) {
-		return time.Date(t.Year(), t.Month(), job.Day, job.Hour, job.Minute, job.Second, 0, loc)
+		return time.Date(t.Year(), t.Month(), job.Day, job.Hour, job.Minute, job.Second, 0, t.Location())
 	}
 	// 下一个周期（下个月）
-	return time.Date(t.Year(), t.Month()+1, job.Day, job.Hour, job.Minute, job.Second, 0, loc)
+	return time.Date(t.Year(), t.Month()+1, job.Day, job.Hour, job.Minute, job.Second, 0, t.Location())
 }
 
-func calculateNextWeekTime(t time.Time, job JobData, loc *time.Location) time.Time {
+func calculateNextWeekTime(t time.Time, job JobData) time.Time {
 	weekday := t.Weekday()
 	days := int(job.Weekday - weekday)
 	if days < 0 {
@@ -55,37 +56,37 @@ func calculateNextWeekTime(t time.Time, job JobData, loc *time.Location) time.Ti
 	}
 	// 判断是否可执行并返回下一个执行时间
 	if canRun(t, job) {
-		return time.Date(t.Year(), t.Month(), t.Day(), job.Hour, job.Minute, job.Second, 0, loc)
+		return time.Date(t.Year(), t.Month(), t.Day(), job.Hour, job.Minute, job.Second, 0, t.Location())
 	}
 	// 下一个周期（下周）
-	return time.Date(t.Year(), t.Month(), t.Day()+days+7, job.Hour, job.Minute, job.Second, 0, loc)
+	return time.Date(t.Year(), t.Month(), t.Day()+days+7, job.Hour, job.Minute, job.Second, 0, t.Location())
 }
 
-func calculateNextDayTime(t time.Time, job JobData, loc *time.Location) time.Time {
+func calculateNextDayTime(t time.Time, job JobData) time.Time {
 	// 判断是否可执行并返回下一个执行时间
 	if canRun(t, job) {
-		return time.Date(t.Year(), t.Month(), t.Day(), job.Hour, job.Minute, job.Second, 0, loc)
+		return time.Date(t.Year(), t.Month(), t.Day(), job.Hour, job.Minute, job.Second, 0, t.Location())
 	}
 	// 下一个周期（明天）
-	return time.Date(t.Year(), t.Month(), t.Day()+1, job.Hour, job.Minute, job.Second, 0, loc)
+	return time.Date(t.Year(), t.Month(), t.Day()+1, job.Hour, job.Minute, job.Second, 0, t.Location())
 }
 
-func calculateNextHourTime(t time.Time, job JobData, loc *time.Location) time.Time {
+func calculateNextHourTime(t time.Time, job JobData) time.Time {
 	// 判断是否可执行并返回下一个执行时间
 	if canRun(t, job) {
-		return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), job.Minute, job.Second, 0, loc)
+		return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), job.Minute, job.Second, 0, t.Location())
 	}
 	// 下一个周期（下个小时）
-	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour()+1, job.Minute, job.Second, 0, loc)
+	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour()+1, job.Minute, job.Second, 0, t.Location())
 }
 
-func calculateNextMinuteTime(t time.Time, job JobData, loc *time.Location) time.Time {
+func calculateNextMinuteTime(t time.Time, job JobData) time.Time {
 	// 判断是否可执行并返回下一个执行时间
 	if canRun(t, job) {
-		return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), job.Second, 0, loc)
+		return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), job.Second, 0, t.Location())
 	}
 	// 下一个周期（下分钟）
-	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute()+1, job.Second, 0, loc)
+	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute()+1, job.Second, 0, t.Location())
 }
 
 // 检查是否本周期可以运行

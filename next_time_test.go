@@ -92,8 +92,8 @@ func TestGetNextTime(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			now := time.Now()
-			loc := time.FixedZone("CST", 8*3600)
-			nextTime, err := timerx.GetNextTime(now,loc,test.job)
+			// loc := time.FixedZone("CST", 8*3600)
+			nextTime, err := timerx.GetNextTime(now, test.job)
 			if err != nil {
 				if test.expectedError == nil || err.Error() != test.expectedError.Error() {
 					t.Errorf("Expected error: %v, Got error: %v", test.expectedError, err)

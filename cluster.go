@@ -33,7 +33,8 @@ type Cluster struct {
 	redis     redis.UniversalClient
 	cache     *cachex.Cache
 	logger    Logger
-	keyPrefix string // key前缀
+	keyPrefix string         // key前缀
+	location  *time.Location // 根据时区计算的时间
 
 	lockKey string // 全局计算的key
 	zsetKey string // 有序集合的key
@@ -56,6 +57,7 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 			cache:     cachex.NewCache(),
 			logger:    op.logger,
 			keyPrefix: keyPrefix,
+			location:  op.location,
 			lockKey:   "timer:cluster_globalLockKey" + keyPrefix, // 定时器的全局锁
 			zsetKey:   "timer:cluster_zsetKey" + keyPrefix,       // 有序集合
 			listKey:   "timer:cluster_listKey" + keyPrefix,       // 列表
@@ -208,7 +210,7 @@ func (c *Cluster) addJob(ctx context.Context, taskId string, jobData JobData, ca
 		return errors.New("key已存在")
 	}
 
-	_, err := GetNextTime(time.Now(), time.Local, jobData)
+	_, err := GetNextTime(time.Now().In(c.location), jobData)
 	if err != nil {
 		c.logger.Errorf(ctx, "获取下次执行时间失败:%s", err.Error())
 		return err
@@ -259,7 +261,7 @@ func (c *Cluster) getNextTime() {
 	clusterWorkerList.Range(func(key, value interface{}) bool {
 		val := value.(timerStr)
 
-		nextTime, _ := GetNextTime(time.Now(), time.Local, *val.JobData)
+		nextTime, _ := GetNextTime(time.Now().In(c.location), *val.JobData)
 
 		// fmt.Println(val.ExtendData, val.JobData, nextTime)
 
