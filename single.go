@@ -81,7 +81,7 @@ func InitSingle(ctx context.Context, opts ...Option) *Single {
 // @param callback 回调函数
 // @param extendData 扩展数据
 // @return error
-func (c *Single) AddMonth(ctx context.Context, taskId string, day int, hour int, minute int, second int, callback callback, extendData interface{}) (int, error) {
+func (c *Single) AddMonth(ctx context.Context, taskId string, day int, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int, error) {
 	nowTime := time.Now()
 
 	jobData := JobData{
@@ -103,7 +103,7 @@ func (c *Single) AddMonth(ctx context.Context, taskId string, day int, hour int,
 // @param hour int 小时
 // @param minute int 分钟
 // @param second int 秒
-func (c *Single) AddWeek(ctx context.Context, taskId string, week time.Weekday, hour int, minute int, second int, callback callback, extendData interface{}) (int, error) {
+func (c *Single) AddWeek(ctx context.Context, taskId string, week time.Weekday, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int, error) {
 	nowTime := time.Now()
 
 	jobData := JobData{
@@ -119,7 +119,7 @@ func (c *Single) AddWeek(ctx context.Context, taskId string, week time.Weekday, 
 }
 
 // 每天执行一次
-func (c *Single) AddDay(ctx context.Context, taskId string, hour int, minute int, second int, callback callback, extendData interface{}) (int, error) {
+func (c *Single) AddDay(ctx context.Context, taskId string, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int, error) {
 	nowTime := time.Now()
 
 	jobData := JobData{
@@ -134,7 +134,7 @@ func (c *Single) AddDay(ctx context.Context, taskId string, hour int, minute int
 }
 
 // 每小时执行一次
-func (c *Single) AddHour(ctx context.Context, taskId string, minute int, second int, callback callback, extendData interface{}) (int, error) {
+func (c *Single) AddHour(ctx context.Context, taskId string, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int, error) {
 	nowTime := time.Now()
 
 	jobData := JobData{
@@ -148,7 +148,7 @@ func (c *Single) AddHour(ctx context.Context, taskId string, minute int, second 
 }
 
 // 每分钟执行一次
-func (c *Single) AddMinute(ctx context.Context, taskId string, second int, callback callback, extendData interface{}) (int, error) {
+func (c *Single) AddMinute(ctx context.Context, taskId string, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int, error) {
 	nowTime := time.Now()
 
 	jobData := JobData{
@@ -161,7 +161,7 @@ func (c *Single) AddMinute(ctx context.Context, taskId string, second int, callb
 }
 
 // 特定时间间隔
-func (c *Single) AddSpace(ctx context.Context, taskId string, spaceTime time.Duration, callback callback, extendData interface{}) (int, error) {
+func (c *Single) AddSpace(ctx context.Context, taskId string, spaceTime time.Duration, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int, error) {
 	nowTime := time.Now()
 
 	if spaceTime < 0 {
@@ -184,7 +184,7 @@ func (c *Single) AddSpace(ctx context.Context, taskId string, spaceTime time.Dur
 // @param extend 附加参数
 // @return int 定时器索引
 // @return error 错误
-func (l *Single) addJob(ctx context.Context, jobData JobData, call callback, extend interface{}) (int, error) {
+func (l *Single) addJob(ctx context.Context, jobData JobData, call func(ctx context.Context, extendData interface{}) error, extend interface{}) (int, error) {
 	singleTimerIndex += 1
 
 	_, err := GetNextTime(time.Now().In(l.location), jobData)
@@ -281,7 +281,7 @@ func (s *Single) iterator(ctx context.Context) {
 
 // 定时器操作类
 // 这里不应painc
-func (s *Single) doTask(ctx context.Context, call callback, extend interface{}) error {
+func (s *Single) doTask(ctx context.Context, call func(ctx context.Context, extendData interface{}) error, extend interface{}) error {
 	defer func() {
 		if err := recover(); err != nil {
 			s.logger.Errorf(ctx, "timer:回调任务panic err:%+v stack:%s", err, string(debug.Stack()))

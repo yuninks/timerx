@@ -95,7 +95,7 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 // @param callback 回调函数
 // @param extendData 扩展数据
 // @return error
-func (c *Cluster) EveryMonth(ctx context.Context, taskId string, day int, hour int, minute int, second int, callback callback, extendData interface{}) error {
+func (c *Cluster) EveryMonth(ctx context.Context, taskId string, day int, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) error {
 	nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
@@ -117,7 +117,7 @@ func (c *Cluster) EveryMonth(ctx context.Context, taskId string, day int, hour i
 // @param hour int 小时
 // @param minute int 分钟
 // @param second int 秒
-func (c *Cluster) EveryWeek(ctx context.Context, taskId string, week time.Weekday, hour int, minute int, second int, callback callback, extendData interface{}) error {
+func (c *Cluster) EveryWeek(ctx context.Context, taskId string, week time.Weekday, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) error {
 	nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
@@ -133,7 +133,7 @@ func (c *Cluster) EveryWeek(ctx context.Context, taskId string, week time.Weekda
 }
 
 // 每天执行一次
-func (c *Cluster) EveryDay(ctx context.Context, taskId string, hour int, minute int, second int, callback callback, extendData interface{}) error {
+func (c *Cluster) EveryDay(ctx context.Context, taskId string, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) error {
 	nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
@@ -148,7 +148,7 @@ func (c *Cluster) EveryDay(ctx context.Context, taskId string, hour int, minute 
 }
 
 // 每小时执行一次
-func (c *Cluster) EveryHour(ctx context.Context, taskId string, minute int, second int, callback callback, extendData interface{}) error {
+func (c *Cluster) EveryHour(ctx context.Context, taskId string, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) error {
 	nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
@@ -162,7 +162,7 @@ func (c *Cluster) EveryHour(ctx context.Context, taskId string, minute int, seco
 }
 
 // 每分钟执行一次
-func (c *Cluster) EveryMinute(ctx context.Context, taskId string, second int, callback callback, extendData interface{}) error {
+func (c *Cluster) EveryMinute(ctx context.Context, taskId string, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) error {
 	nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
@@ -175,7 +175,7 @@ func (c *Cluster) EveryMinute(ctx context.Context, taskId string, second int, ca
 }
 
 // 特定时间间隔
-func (c *Cluster) EverySpace(ctx context.Context, taskId string, spaceTime time.Duration, callback callback, extendData interface{}) error {
+func (c *Cluster) EverySpace(ctx context.Context, taskId string, spaceTime time.Duration, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) error {
 	nowTime := time.Now().In(c.location)
 
 	if spaceTime < 0 {
@@ -203,7 +203,7 @@ func (c *Cluster) EverySpace(ctx context.Context, taskId string, spaceTime time.
 // @param callback callback 回调函数
 // @param extendData interface{} 扩展数据
 // @return error
-func (c *Cluster) addJob(ctx context.Context, taskId string, jobData JobData, callback callback, extendData interface{}) error {
+func (c *Cluster) addJob(ctx context.Context, taskId string, jobData JobData, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) error {
 	_, ok := clusterWorkerList.Load(taskId)
 	if ok {
 		c.logger.Errorf(ctx, "key已存在:%s", taskId)

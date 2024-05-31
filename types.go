@@ -6,7 +6,7 @@ import (
 )
 
 type timerStr struct {
-	Callback   callback        // 需要回调的方法
+	Callback   func(ctx context.Context, extendData interface{}) error        // 需要回调的方法
 	CanRunning chan (struct{}) // 是否允许执行(only single)
 	TaskId     string          // 任务ID 全局唯一键(only cluster)
 	ExtendData interface{}     // 附加参数
@@ -40,4 +40,4 @@ type JobData struct {
 }
 
 // 定义各个回调函数
-type callback func(ctx context.Context, extendData interface{}) error
+// type callback func(ctx context.Context, extendData interface{}) error
