@@ -34,13 +34,13 @@ func cluster() {
 	client := getRedis()
 	ctx := context.Background()
 	cluster := timerx.InitCluster(ctx, client, "test")
-	err := cluster.AddSpace(ctx, "test_space", 1*time.Second, aa, "这是秒任务")
+	err := cluster.EverySpace(ctx, "test_space", 1*time.Second, aa, "这是秒任务")
 	fmt.Println(err)
-	err = cluster.AddMinute(ctx, "test_min", 15, aa, "这是分钟任务")
+	err = cluster.EveryMinute(ctx, "test_min", 15, aa, "这是分钟任务")
 	fmt.Println(err)
-	err = cluster.AddHour(ctx, "test_hour", 30, 0, aa, "这是小时任务")
+	err = cluster.EveryHour(ctx, "test_hour", 30, 0, aa, "这是小时任务")
 	fmt.Println(err)
-	err = cluster.AddDay(ctx, "test_day", 11, 0, 0, aa, "这是天任务")
+	err = cluster.EveryDay(ctx, "test_day", 11, 0, 0, aa, "这是天任务")
 	fmt.Println(err)
 }
 
@@ -93,12 +93,12 @@ func re() {
 
 	ctx := context.Background()
 	cl := timerx.InitCluster(ctx, client, "kkkk")
-	cl.AddSpace(ctx, "test1", 1*time.Millisecond, aa, "data")
-	cl.AddSpace(ctx, "test2", 1*time.Millisecond, aa, "data")
-	cl.AddSpace(ctx, "test3", 1*time.Millisecond, aa, "data")
-	cl.AddSpace(ctx, "test4", 1*time.Millisecond, aa, "data")
-	cl.AddSpace(ctx, "test5", 1*time.Millisecond, aa, "data")
-	cl.AddSpace(ctx, "test6", 1*time.Millisecond, aa, "data")
+	cl.EverySpace(ctx, "test1", 1*time.Millisecond, aa, "data")
+	cl.EverySpace(ctx, "test2", 1*time.Millisecond, aa, "data")
+	cl.EverySpace(ctx, "test3", 1*time.Millisecond, aa, "data")
+	cl.EverySpace(ctx, "test4", 1*time.Millisecond, aa, "data")
+	cl.EverySpace(ctx, "test5", 1*time.Millisecond, aa, "data")
+	cl.EverySpace(ctx, "test6", 1*time.Millisecond, aa, "data")
 
 	select {}
 }
