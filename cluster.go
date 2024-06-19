@@ -216,16 +216,16 @@ func (c *Cluster) addJob(ctx context.Context, taskId string, jobData JobData, ca
 		return err
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	// ctx, cancel := context.WithCancel(ctx)
+	// defer cancel()
 
-	lock := lockx.NewGlobalLock(ctx, c.redis, taskId)
-	tB := lock.Try(2)
-	if !tB {
-		c.logger.Errorf(ctx, "添加失败:%s", taskId)
-		return errors.New("添加失败")
-	}
-	defer lock.Unlock()
+	// lock := lockx.NewGlobalLock(ctx, c.redis, taskId)
+	// tB := lock.Try(2)
+	// if !tB {
+	// 	c.logger.Errorf(ctx, "添加失败:%s", taskId)
+	// 	return errors.New("添加失败")
+	// }
+	// defer lock.Unlock()
 
 	t := timerStr{
 		Callback:   callback,
