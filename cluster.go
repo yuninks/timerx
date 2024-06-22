@@ -32,6 +32,7 @@ type Cluster struct {
 	ctx       context.Context
 	redis     redis.UniversalClient
 	cache     *cachex.Cache
+	timeout   time.Duration
 	logger    Logger
 	keyPrefix string         // key前缀
 	location  *time.Location // 根据时区计算的时间
@@ -55,6 +56,7 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 			ctx:       ctx,
 			redis:     red,
 			cache:     cachex.NewCache(),
+			timeout:   op.timeout,
 			logger:    op.logger,
 			keyPrefix: keyPrefix,
 			location:  op.location,
@@ -63,6 +65,9 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 			listKey:   "timer:cluster_listKey" + keyPrefix,       // 列表
 			setKey:    "timer:cluster_setKey" + keyPrefix,        // 重入集合
 		}
+
+		// 设置锁的超时时间
+		lockx.InitOption(lockx.SetTimeout(op.timeout))
 
 		// 监听任务
 		go clu.watch()
@@ -418,7 +423,7 @@ type ReJobData struct {
 // 执行任务
 func (c *Cluster) doTask(ctx context.Context, taskId string) {
 
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
 	val, ok := clusterWorkerList.Load(taskId)

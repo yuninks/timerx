@@ -3,14 +3,16 @@ package timerx
 import "time"
 
 type Options struct {
-	logger   Logger
-	location *time.Location
+	logger      Logger
+	location    *time.Location
+	timeout time.Duration
 }
 
 func defaultOptions() Options {
 	return Options{
-		logger:   NewLogger(),
-		location: time.Local,
+		logger:      NewLogger(),
+		location:    time.Local,
+		timeout: time.Hour,
 	}
 }
 
@@ -35,5 +37,12 @@ func SetLogger(log Logger) Option {
 func SetTimeZone(zone *time.Location) Option {
 	return func(o *Options) {
 		o.location = zone
+	}
+}
+
+// 设置任务最长执行时间
+func SetTimeout(d time.Duration) Option {
+	return func(o *Options) {
+		o.timeout = d
 	}
 }
