@@ -47,19 +47,19 @@ func cluster() {
 func worker() {
 	client := getRedis()
 	w := timerx.InitOnce(context.Background(), client, "test", &Worker{})
-	w.Add("test", "test", 1*time.Second, map[string]interface{}{
+	w.Save("test", "test", 1*time.Second, map[string]interface{}{
 		"test": "test",
 	})
-	w.Add("test2", "test", 1*time.Second, map[string]interface{}{
+	w.Save("test2", "test", 1*time.Second, map[string]interface{}{
 		"test": "test",
 	})
-	w.Add("test3", "test", 1*time.Second, map[string]interface{}{
+	w.Save("test3", "test", 1*time.Second, map[string]interface{}{
 		"test": "test",
 	})
-	w.Add("test4", "test", 1*time.Second, map[string]interface{}{
+	w.Save("test4", "test", 1*time.Second, map[string]interface{}{
 		"test": "test",
 	})
-	w.Add("test5", "test", 1*time.Second, map[string]interface{}{
+	w.Save("test5", "test", 1*time.Second, map[string]interface{}{
 		"test": "test",
 	})
 
