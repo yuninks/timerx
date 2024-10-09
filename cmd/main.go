@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -37,20 +38,42 @@ func once() {
 	w := OnceWorker{}
 	one := timerx.InitOnce(ctx, client, "test", w)
 
-	err := one.Save("test", "test", 1*time.Second, map[string]interface{}{})
+	d := OnceData{
+		Num: 1,
+	}
+
+	err := one.Create("test", "test", 1*time.Second, d)
 	if err != nil {
 		fmt.Println(err)
 	}
 
 }
 
+type OnceData struct {
+	Num int
+}
+
 type OnceWorker struct{}
 
-func (l OnceWorker) Worker(ctx context.Context, taskType string, taskId string, attachData interface{}) (timerx.WorkerCode, time.Duration) {
+func (l OnceWorker) Worker(ctx context.Context, taskType string, taskId string, attachData interface{}) *timerx.OnceWorkerResp {
 	fmt.Println("执行时间:", time.Now().Format("2006-01-02 15:04:05"))
 	fmt.Println(taskId, taskType)
 	fmt.Println(attachData)
-	return timerx.WorkerCodeAgain, time.Millisecond
+
+	d := OnceData{}
+
+	by, _ := json.Marshal(attachData)
+	json.Unmarshal(by, &d)
+
+	d.Num++
+
+	fmt.Println(d)
+
+	return &timerx.OnceWorkerResp{
+		Retry:      true,
+		AttachData: d,
+		DelayTime:  1 * time.Second,
+	}
 }
 
 func cluster() {
@@ -69,7 +92,7 @@ func cluster() {
 
 func worker() {
 	client := getRedis()
-	w := timerx.InitOnce(context.Background(), client, "test", &Worker{})
+	w := timerx.InitOnce(context.Background(), client, "test", &OnceWorker{})
 	w.Save("test", "test", 1*time.Second, map[string]interface{}{
 		"test": "test",
 	})
@@ -87,15 +110,6 @@ func worker() {
 	})
 
 	select {}
-}
-
-type Worker struct{}
-
-func (w *Worker) Worker(ctx context.Context, jobType string, uniqueKey string, data interface{}) (timerx.WorkerCode, time.Duration) {
-	fmt.Println("执行时间:", time.Now().Format("2006-01-02 15:04:05"))
-	fmt.Println(uniqueKey, jobType)
-	fmt.Println(data)
-	return timerx.WorkerCodeAgain, time.Second
 }
 
 func getRedis() *redis.Client {

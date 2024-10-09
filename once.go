@@ -28,12 +28,11 @@ type Once struct {
 	worker  Callback
 }
 
-type WorkerCode int
-
-const (
-	WorkerCodeSuccess WorkerCode = 0  // 处理完成(不需要重入)
-	WorkerCodeAgain   WorkerCode = -1 // 需要继续定时,默认原来的时间
-)
+type OnceWorkerResp struct {
+	Retry      bool // 是否重试 true
+	DelayTime  time.Duration
+	AttachData interface{}
+}
 
 // 需要考虑执行失败重新放入队列的情况
 type Callback interface {
@@ -43,7 +42,7 @@ type Callback interface {
 	// @param data interface{} 任务数据
 	// @return WorkerCode 任务执行结果
 	// @return time.Duration 任务执行时间间隔
-	Worker(ctx context.Context, taskType string, taskId string, attachData interface{}) (WorkerCode, time.Duration)
+	Worker(ctx context.Context, taskType string, taskId string, attachData interface{}) *OnceWorkerResp
 }
 
 var wo *Once = nil
@@ -217,13 +216,17 @@ func (l *Once) doTask(ctx context.Context, key string) {
 	ed := extendData{}
 	json.Unmarshal([]byte(str), &ed)
 
-	code, t := l.worker.Worker(ctx, s[0], s[1], ed.Data)
+	resp := l.worker.Worker(ctx, s[0], s[1], ed.Data)
+	if resp == nil {
+		return
+	}
 
-	if code == WorkerCodeAgain {
+	if resp.Retry {
 		// 重新放入队列
-		if t != 0 && t == t.Abs() {
-			ed.Delay = t
+		if resp.DelayTime != 0 && resp.DelayTime == resp.DelayTime.Abs() {
+			ed.Delay = resp.DelayTime
 		}
+		ed.Data = resp.AttachData
 		l.logger.Infof(ctx, "任务重新放入队列:%s", key)
 		fmt.Println("重入时间:", time.Now().Format("2006-01-02 15:04:05"))
 		l.Create(s[0], s[1], ed.Delay, ed.Data)
