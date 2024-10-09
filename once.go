@@ -55,7 +55,7 @@ type extendData struct {
 }
 
 // 初始化
-func InitOnce(ctx context.Context, re *redis.Client, keyPrefix string, call Callback, opts ...Option) *Once {
+func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, call Callback, opts ...Option) *Once {
 	op := newOptions(opts...)
 	once.Do(func() {
 		wo = &Once{
@@ -114,6 +114,27 @@ func (w *Once) Save(taskType string, taskId string, delayTime time.Duration, att
 func (l *Once) Create(taskType string, taskId string, delayTime time.Duration, attachData interface{}) error {
 
 	// 判断有序集合Key是否存在，存在则报错，不存在则写入
+	if l.redis.Exists(l.ctx, l.zsetKey).Val() == 0 {
+		redisKey := fmt.Sprintf("%s[:]%s", taskType, taskId)
+		ed := extendData{
+			Delay: delayTime,
+			Data:  attachData,
+		}
+		b, _ := json.Marshal(ed)
+
+		// 写入附加数据
+		_, err := l.redis.SetEX(l.ctx, redisKey, b, delayTime+time.Second*5).Result()
+		if err != nil {
+			return err
+		}
+		_, err = l.redis.ZAdd(l.ctx, l.zsetKey, &redis.Z{
+			Score:  float64(time.Now().Add(delayTime).UnixMilli()),
+			Member: redisKey,
+		}).Result()
+		if err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -178,6 +199,7 @@ func (w *Once) watch() {
 
 // 执行任务
 func (l *Once) doTask(ctx context.Context, key string) {
+	fmt.Println("任务时间:", time.Now().Format("2006-01-02 15:04:05"))
 	defer func() {
 		if err := recover(); err != nil {
 			l.logger.Errorf(ctx, "timer:回调任务panic:%s stack:%s", err, string(debug.Stack()))
@@ -203,6 +225,7 @@ func (l *Once) doTask(ctx context.Context, key string) {
 			ed.Delay = t
 		}
 		l.logger.Infof(ctx, "任务重新放入队列:%s", key)
+		fmt.Println("重入时间:", time.Now().Format("2006-01-02 15:04:05"))
 		l.Create(s[0], s[1], ed.Delay, ed.Data)
 	}
 }

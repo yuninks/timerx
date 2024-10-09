@@ -24,10 +24,33 @@ func main() {
 
 	// re()
 	// d()
-	cluster()
+	// cluster()
+	once()
 
 	select {}
 
+}
+
+func once() {
+	client := getRedis()
+	ctx := context.Background()
+	w := OnceWorker{}
+	one := timerx.InitOnce(ctx, client, "test", w)
+
+	err := one.Save("test", "test", 1*time.Second, map[string]interface{}{})
+	if err != nil {
+		fmt.Println(err)
+	}
+
+}
+
+type OnceWorker struct{}
+
+func (l OnceWorker) Worker(ctx context.Context, taskType string, taskId string, attachData interface{}) (timerx.WorkerCode, time.Duration) {
+	fmt.Println("执行时间:", time.Now().Format("2006-01-02 15:04:05"))
+	fmt.Println(taskId, taskType)
+	fmt.Println(attachData)
+	return timerx.WorkerCodeAgain, time.Millisecond
 }
 
 func cluster() {
