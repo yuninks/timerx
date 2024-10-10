@@ -41,8 +41,9 @@ func once() {
 	d := OnceData{
 		Num: 1,
 	}
+	dy, _ := json.Marshal(d)
 
-	err := one.Create("test", "test", 1*time.Second, d)
+	err := one.Create("test", "test", 1*time.Second, dy)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -55,23 +56,24 @@ type OnceData struct {
 
 type OnceWorker struct{}
 
-func (l OnceWorker) Worker(ctx context.Context, taskType string, taskId string, attachData interface{}) *timerx.OnceWorkerResp {
+func (l OnceWorker) Worker(ctx context.Context, taskType string, taskId string, attachData []byte) *timerx.OnceWorkerResp {
 	fmt.Println("执行时间:", time.Now().Format("2006-01-02 15:04:05"))
 	fmt.Println(taskId, taskType)
-	fmt.Println(attachData)
+	fmt.Printf("原来的参数：%s\n", string(attachData))
 
 	d := OnceData{}
 
-	by, _ := json.Marshal(attachData)
-	json.Unmarshal(by, &d)
+	json.Unmarshal(attachData, &d)
 
 	d.Num++
 
 	fmt.Println(d)
 
+	dy, _ := json.Marshal(d)
+
 	return &timerx.OnceWorkerResp{
 		Retry:      true,
-		AttachData: d,
+		AttachData: dy,
 		DelayTime:  1 * time.Second,
 	}
 }
@@ -91,23 +93,23 @@ func cluster() {
 }
 
 func worker() {
-	client := getRedis()
-	w := timerx.InitOnce(context.Background(), client, "test", &OnceWorker{})
-	w.Save("test", "test", 1*time.Second, map[string]interface{}{
-		"test": "test",
-	})
-	w.Save("test2", "test", 1*time.Second, map[string]interface{}{
-		"test": "test",
-	})
-	w.Save("test3", "test", 1*time.Second, map[string]interface{}{
-		"test": "test",
-	})
-	w.Save("test4", "test", 1*time.Second, map[string]interface{}{
-		"test": "test",
-	})
-	w.Save("test5", "test", 1*time.Second, map[string]interface{}{
-		"test": "test",
-	})
+	// client := getRedis()
+	// w := timerx.InitOnce(context.Background(), client, "test", &OnceWorker{})
+	// w.Save("test", "test", 1*time.Second, map[string]interface{}{
+	// 	"test": "test",
+	// })
+	// w.Save("test2", "test", 1*time.Second, map[string]interface{}{
+	// 	"test": "test",
+	// })
+	// w.Save("test3", "test", 1*time.Second, map[string]interface{}{
+	// 	"test": "test",
+	// })
+	// w.Save("test4", "test", 1*time.Second, map[string]interface{}{
+	// 	"test": "test",
+	// })
+	// w.Save("test5", "test", 1*time.Second, map[string]interface{}{
+	// 	"test": "test",
+	// })
 
 	select {}
 }

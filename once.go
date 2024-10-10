@@ -31,7 +31,7 @@ type Once struct {
 type OnceWorkerResp struct {
 	Retry      bool // 是否重试 true
 	DelayTime  time.Duration
-	AttachData interface{}
+	AttachData []byte
 }
 
 // 需要考虑执行失败重新放入队列的情况
@@ -42,7 +42,7 @@ type Callback interface {
 	// @param data interface{} 任务数据
 	// @return WorkerCode 任务执行结果
 	// @return time.Duration 任务执行时间间隔
-	Worker(ctx context.Context, taskType string, taskId string, attachData interface{}) *OnceWorkerResp
+	Worker(ctx context.Context, taskType string, taskId string, attachData []byte) *OnceWorkerResp
 }
 
 var wo *Once = nil
@@ -50,7 +50,7 @@ var once sync.Once
 
 type extendData struct {
 	Delay time.Duration
-	Data  interface{}
+	Data  []byte
 }
 
 // 初始化
@@ -78,7 +78,7 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 // @param uniTaskId string 任务唯一标识
 // @param delayTime time.Duration 延迟时间
 // @param attachData interface{} 附加数据
-func (w *Once) Save(taskType string, taskId string, delayTime time.Duration, attachData interface{}) error {
+func (w *Once) Save(taskType string, taskId string, delayTime time.Duration, attachData []byte) error {
 	if delayTime.Abs() != delayTime {
 		return fmt.Errorf("时间间隔不能为负数")
 	}
@@ -110,7 +110,7 @@ func (w *Once) Save(taskType string, taskId string, delayTime time.Duration, att
 }
 
 // 添加任务(不覆盖)
-func (l *Once) Create(taskType string, taskId string, delayTime time.Duration, attachData interface{}) error {
+func (l *Once) Create(taskType string, taskId string, delayTime time.Duration, attachData []byte) error {
 
 	// 判断有序集合Key是否存在，存在则报错，不存在则写入
 	if l.redis.Exists(l.ctx, l.zsetKey).Val() == 0 {
