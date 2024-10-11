@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -39,11 +38,19 @@ func once() {
 	one := timerx.InitOnce(ctx, client, "test", w)
 
 	d := OnceData{
-		Num: 1,
+		Num: 3,
 	}
-	dy, _ := json.Marshal(d)
+	// dy, _ := json.Marshal(d)
 
-	err := one.Create("test", "test", 1*time.Second, dy)
+	err := one.Create("test", "test3", 1*time.Second, d)
+	if err != nil {
+		fmt.Println(err)
+	}
+	d = OnceData{
+		Num: 4,
+	}
+	// dy, _ = json.Marshal(d)
+	err = one.Create("test", "test4", 1*time.Second, d)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -56,24 +63,25 @@ type OnceData struct {
 
 type OnceWorker struct{}
 
-func (l OnceWorker) Worker(ctx context.Context, taskType string, taskId string, attachData []byte) *timerx.OnceWorkerResp {
+func (l OnceWorker) Worker(ctx context.Context, taskType string, taskId string, attachData interface{}) *timerx.OnceWorkerResp {
 	fmt.Println("执行时间:", time.Now().Format("2006-01-02 15:04:05"))
-	fmt.Println(taskId, taskType)
-	fmt.Printf("原来的参数：%s\n", string(attachData))
+	fmt.Println(taskType, taskId)
 
-	d := OnceData{}
+	fmt.Printf("原来的参数：%+v\n", attachData)
 
-	json.Unmarshal(attachData, &d)
+	// d := OnceData{}
 
-	d.Num++
+	// json.Unmarshal(ab, &d)
 
-	fmt.Println(d)
+	// d.Num++
 
-	dy, _ := json.Marshal(d)
+	// fmt.Println(d)
+
+	// dy, _ := json.Marshal(d)
 
 	return &timerx.OnceWorkerResp{
 		Retry:      true,
-		AttachData: dy,
+		AttachData: attachData,
 		DelayTime:  1 * time.Second,
 	}
 }
