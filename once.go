@@ -204,7 +204,6 @@ func (w *Once) watch() {
 
 // 执行任务
 func (l *Once) doTask(ctx context.Context, key string) {
-	fmt.Println("任务时间:", time.Now().Format("2006-01-02 15:04:05"))
 	defer func() {
 		if err := recover(); err != nil {
 			l.logger.Errorf(ctx, "timer:回调任务panic:%s stack:%s", err, string(debug.Stack()))
@@ -217,11 +216,11 @@ func (l *Once) doTask(ctx context.Context, key string) {
 	redisKey := l.keyPrefix + key
 	str, err := l.redis.Get(ctx, redisKey).Result()
 	if err != nil {
-		l.logger.Errorf(ctx, "获取数据失败 err:%s", err)
+		l.logger.Errorf(ctx, "获取数据失败 key:%s err:%s", key, err)
 		return
 	}
 
-	fmt.Println("参数：", str)
+	l.logger.Infof(ctx, "任务执行:%s 参数：%s", key, str)
 
 	ed := extendData{}
 	json.Unmarshal([]byte(str), &ed)
@@ -238,7 +237,6 @@ func (l *Once) doTask(ctx context.Context, key string) {
 		}
 		ed.Data = resp.AttachData
 		l.logger.Infof(ctx, "任务重新放入队列:%s", key)
-		fmt.Println("重入时间:", time.Now().Format("2006-01-02 15:04:05"))
 		l.Create(s[0], s[1], ed.Delay, ed.Data)
 	}
 }
