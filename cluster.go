@@ -448,7 +448,7 @@ func (c *Cluster) doTask(ctx context.Context, taskId string) {
 		}
 	}()
 
-	ctx = context.WithValue(ctx, "trace_id", uuid.NewV4().String)
+	ctx = context.WithValue(ctx, "trace_id", uuid.NewV4().String())
 
 	// 执行任务
 	t.Callback(ctx, t.ExtendData)

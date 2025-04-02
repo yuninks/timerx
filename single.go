@@ -288,7 +288,7 @@ func (s *Single) doTask(ctx context.Context, call func(ctx context.Context, exte
 		}
 	}()
 
-	ctx = context.WithValue(ctx, "trace_id", uuid.NewV4().String)
+	ctx = context.WithValue(ctx, "trace_id", uuid.NewV4().String())
 
 	return call(ctx, extend)
 }
