@@ -82,7 +82,7 @@ func TestGetNextTime(t *testing.T) {
 		{
 			name: "Test unknown JobType",
 			job: timerx.JobData{
-				JobType: timerx.JobType(100),
+				JobType: timerx.JobType("100"),
 			},
 			expectedTime:  time.Time{},
 			expectedError: errors.New("未知的任务类型: 100"),
