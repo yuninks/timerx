@@ -24,8 +24,8 @@ func main() {
 
 	// re()
 	// d()
-	// cluster()
-	once()
+	cluster()
+	// once()
 
 	select {}
 
@@ -89,7 +89,7 @@ func (l OnceWorker) Worker(ctx context.Context, taskType string, taskId string, 
 func cluster() {
 	client := getRedis()
 	ctx := context.Background()
-	cluster := timerx.InitCluster(ctx, client, "test")
+	cluster := timerx.InitCluster(ctx, client, "test",timerx.SetPriority(101))
 	err := cluster.EverySpace(ctx, "test_space", 1*time.Second, aa, "这是秒任务")
 	fmt.Println(err)
 	err = cluster.EveryMinute(ctx, "test_min", 15, aa, "这是分钟任务")

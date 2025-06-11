@@ -3,16 +3,18 @@ package timerx
 import "time"
 
 type Options struct {
-	logger      Logger
-	location    *time.Location
-	timeout time.Duration
+	logger   Logger
+	location *time.Location
+	timeout  time.Duration
+	priority  int
 }
 
 func defaultOptions() Options {
 	return Options{
-		logger:      NewLogger(),
-		location:    time.Local,
-		timeout: time.Hour,
+		logger:   NewLogger(),
+		location: time.Local,
+		timeout:  time.Hour,
+		priority: 0,
 	}
 }
 
@@ -44,5 +46,12 @@ func SetTimeZone(zone *time.Location) Option {
 func SetTimeout(d time.Duration) Option {
 	return func(o *Options) {
 		o.timeout = d
+	}
+}
+
+// 设置优先级
+func SetPriority(priority int) Option {
+	return func(o *Options) {
+		o.priority = priority
 	}
 }
