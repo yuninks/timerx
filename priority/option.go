@@ -7,7 +7,6 @@ import (
 )
 
 type Options struct {
-	priority       int           // 优先级,数字越大越优先
 	updateInterval time.Duration // 更新间隔
 	expireTime     time.Duration
 	logger         logger.Logger
@@ -15,7 +14,6 @@ type Options struct {
 
 func defaultOptions() Options {
 	return Options{
-		priority:       0, // 默认优先级
 		updateInterval: time.Second * 10,
 		expireTime:     time.Second * 32,
 		logger:         logger.NewLogger(),
@@ -30,12 +28,6 @@ func newOptions(opts ...Option) Options {
 		opt(&o)
 	}
 	return o
-}
-
-func SetPriority(priority int) Option {
-	return func(o *Options) {
-		o.priority = priority
-	}
 }
 
 func SetLogger(log logger.Logger) Option {

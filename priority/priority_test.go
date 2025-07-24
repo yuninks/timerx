@@ -26,16 +26,30 @@ func TestPriority(t *testing.T) {
 	re := getRedis()
 	ctx := context.Background()
 
-	ctx,cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	fmt.Println("ff")
 
-	pro := priority.InitPriority(ctx, re, "test", priority.SetUpdateInterval(time.Second*5))
+	go func() {
+		time.Sleep(time.Second * 5)
 
-	fmt.Println(pro)
+		ctx, cancel := context.WithCancel(ctx)
 
-	for i := 0; i < 20; i++ {
+		pro := priority.InitPriority(ctx, re, "test", 10, priority.SetUpdateInterval(time.Second*1))
+
+		for i := 0; i < 10; i++ {
+			bb := pro.IsLatest(ctx)
+			fmt.Println("cc:", bb)
+			time.Sleep(time.Second)
+		}
+		
+		cancel()
+	}()
+
+	pro := priority.InitPriority(ctx, re, "test", 0, priority.SetUpdateInterval(time.Second*1))
+
+	for i := 0; i < 25; i++ {
 		bb := pro.IsLatest(ctx)
 		fmt.Println("bb:", bb)
 		time.Sleep(time.Second)

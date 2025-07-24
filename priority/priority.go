@@ -21,15 +21,15 @@ type Priority struct {
 	expireTime time.Duration
 }
 
-func InitPriority(ctx context.Context, re redis.UniversalClient, keyPrefix string, opts ...Option) *Priority {
+func InitPriority(ctx context.Context, re redis.UniversalClient, keyPrefix string, priority int, opts ...Option) *Priority {
 	conf := newOptions(opts...)
 
 	pro := &Priority{
-		ctx:      ctx,
-		priority: conf.priority,
-		redis:    re,
-		logger:   conf.logger,
-		redisKey: "timer:priority_" + keyPrefix,
+		ctx:        ctx,
+		priority:   priority,
+		redis:      re,
+		logger:     conf.logger,
+		redisKey:   "timer:priority_" + keyPrefix,
 		expireTime: conf.expireTime,
 	}
 
