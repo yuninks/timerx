@@ -10,6 +10,7 @@ import (
 	"time"
 
 	uuid "github.com/satori/go.uuid"
+	"github.com/yuninks/timerx/logger"
 )
 
 // 简单定时器
@@ -25,7 +26,7 @@ var singleOnceLimit sync.Once // 实现单例
 
 type Single struct {
 	ctx      context.Context
-	logger   Logger
+	logger   logger.Logger
 	location *time.Location
 }
 

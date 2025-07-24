@@ -1,4 +1,4 @@
-package timerx
+package logger
 
 import (
 	"context"

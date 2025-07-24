@@ -14,6 +14,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/yuninks/cachex"
 	"github.com/yuninks/lockx"
+	"github.com/yuninks/timerx/logger"
 )
 
 // 功能描述
@@ -34,7 +35,7 @@ type Cluster struct {
 	redis     redis.UniversalClient
 	cache     *cachex.Cache
 	timeout   time.Duration
-	logger    Logger
+	logger    logger.Logger
 	keyPrefix string         // key前缀
 	location  *time.Location // 根据时区计算的时间
 

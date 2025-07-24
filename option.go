@@ -1,9 +1,13 @@
 package timerx
 
-import "time"
+import (
+	"time"
+
+	"github.com/yuninks/timerx/logger"
+)
 
 type Options struct {
-	logger   Logger
+	logger   logger.Logger
 	location *time.Location
 	timeout  time.Duration
 	priority  int
@@ -11,7 +15,7 @@ type Options struct {
 
 func defaultOptions() Options {
 	return Options{
-		logger:   NewLogger(),
+		logger:   logger.NewLogger(),
 		location: time.Local,
 		timeout:  time.Hour,
 		priority: 0,
@@ -29,7 +33,7 @@ func newOptions(opts ...Option) Options {
 }
 
 // 设置日志
-func SetLogger(log Logger) Option {
+func SetLogger(log logger.Logger) Option {
 	return func(o *Options) {
 		o.logger = log
 	}

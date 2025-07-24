@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	uuid "github.com/satori/go.uuid"
+	"github.com/yuninks/timerx/logger"
 )
 
 // 功能描述
@@ -21,7 +22,7 @@ import (
 // 单次的任务队列
 type Once struct {
 	ctx       context.Context
-	logger    Logger
+	logger    logger.Logger
 	zsetKey   string
 	listKey   string
 	redis     redis.UniversalClient
