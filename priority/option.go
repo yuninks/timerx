@@ -8,7 +8,7 @@ import (
 
 type Options struct {
 	updateInterval time.Duration // 更新间隔
-	expireTime     time.Duration
+	expireTime     time.Duration // 有效时间
 	logger         logger.Logger
 }
 

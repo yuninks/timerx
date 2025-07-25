@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -13,34 +14,37 @@ import (
 // 多版本场景判断当前是否最新版本
 
 type Priority struct {
-	ctx        context.Context
-	priority   int // 优先级
-	redis      redis.UniversalClient
-	redisKey   string
-	logger     logger.Logger
-	expireTime time.Duration
+	ctx            context.Context
+	priority       int // 优先级
+	redis          redis.UniversalClient
+	redisKey       string
+	logger         logger.Logger
+	expireTime     time.Duration
+	updateInterval time.Duration // 更新间隔
+	deadTime       int64         // 缓存时间戳，单位秒
 }
 
 func InitPriority(ctx context.Context, re redis.UniversalClient, keyPrefix string, priority int, opts ...Option) *Priority {
 	conf := newOptions(opts...)
 
 	pro := &Priority{
-		ctx:        ctx,
-		priority:   priority,
-		redis:      re,
-		logger:     conf.logger,
-		redisKey:   "timer:priority_" + keyPrefix,
-		expireTime: conf.expireTime,
+		ctx:            ctx,
+		priority:       priority,
+		redis:          re,
+		logger:         conf.logger,
+		redisKey:       "timer:priority_" + keyPrefix,
+		expireTime:     conf.expireTime,
+		updateInterval: conf.updateInterval,
 	}
 
 	// 更新间隔
-	updateTnterval := time.NewTicker(conf.updateInterval)
+	ut := time.NewTicker(conf.updateInterval)
 	go func(ctx context.Context) {
 		pro.setPriority()
 	Loop:
 		for {
 			select {
-			case <-updateTnterval.C:
+			case <-ut.C:
 				pro.setPriority()
 			case <-ctx.Done():
 				break Loop
@@ -53,6 +57,10 @@ func InitPriority(ctx context.Context, re redis.UniversalClient, keyPrefix strin
 
 func (l *Priority) IsLatest(ctx context.Context) bool {
 	// 加缓存
+	if atomic.LoadInt64(&l.deadTime) > time.Now().Unix() {
+		return true
+	}
+
 	str, err := l.redis.Get(l.ctx, l.redisKey).Result()
 
 	if err != nil {
@@ -133,6 +141,9 @@ func (l *Priority) setPriority() bool {
 
 	if operationResult == "SET" || operationResult == "UPDATE" {
 		l.logger.Infof(l.ctx, "设置全局优先级成功:%s", priority)
+
+		atomic.StoreInt64(&l.deadTime, time.Now().Add(l.updateInterval).Unix())
+
 		return true
 	}
 	_ = ttl
