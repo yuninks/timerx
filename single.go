@@ -22,7 +22,7 @@ var singleWorkerList sync.Map
 
 var singleTimerIndex int // 当前定时数目
 
-var singleOnceLimit sync.Once // 实现单例
+// var singleOnceLimit sync.Once // 实现单例
 
 type Single struct {
 	ctx      context.Context
@@ -30,7 +30,7 @@ type Single struct {
 	location *time.Location
 }
 
-var sin *Single = nil
+// var sin *Single = nil
 
 var singleNextTime = time.Now() // 下一次执行的时间
 
@@ -38,36 +38,36 @@ var singleNextTime = time.Now() // 下一次执行的时间
 // @param ctx context.Context 上下文
 // @param opts ...Option 配置项
 func InitSingle(ctx context.Context, opts ...Option) *Single {
-	singleOnceLimit.Do(func() {
-		op := newOptions(opts...)
+	// singleOnceLimit.Do(func() {
+	op := newOptions(opts...)
 
-		sin = &Single{
-			ctx:      ctx,
-			logger:   op.logger,
-			location: op.location,
-		}
+	sin := &Single{
+		ctx:      ctx,
+		logger:   op.logger,
+		location: op.location,
+	}
 
-		timer := time.NewTicker(time.Millisecond * 200)
-		go func(ctx context.Context) {
-		Loop:
-			for {
-				select {
-				case t := <-timer.C:
-					if t.Before(singleNextTime) {
-						// 当前时间小于下次发送时间：跳过
-						continue
-					}
-					// 迭代定时器
-					sin.iterator(ctx)
-					// fmt.Println("timer: 执行")
-				case <-ctx.Done():
-					// 跳出循环
-					break Loop
+	timer := time.NewTicker(time.Millisecond * 200)
+	go func(ctx context.Context) {
+	Loop:
+		for {
+			select {
+			case t := <-timer.C:
+				if t.Before(singleNextTime) {
+					// 当前时间小于下次发送时间：跳过
+					continue
 				}
+				// 迭代定时器
+				sin.iterator(ctx)
+				// fmt.Println("timer: 执行")
+			case <-ctx.Done():
+				// 跳出循环
+				break Loop
 			}
-			sin.logger.Infof(ctx, "timer: initend")
-		}(ctx)
-	})
+		}
+		sin.logger.Infof(ctx, "timer: initend")
+	}(ctx)
+	// })
 
 	return sin
 }

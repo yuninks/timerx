@@ -25,7 +25,7 @@ import (
 // 暂不支持删除定时器，因为这个定时器的设计是基于全局的，如果删除了，那么其他服务就不知道了
 
 // 单例模式
-var clusterOnceLimit sync.Once
+// var clusterOnceLimit sync.Once
 
 // 已注册的任务列表
 var clusterWorkerList sync.Map
@@ -48,69 +48,69 @@ type Cluster struct {
 	priorityKey string // 全局优先级的key
 }
 
-var clu *Cluster = nil
+// var clu *Cluster = nil
 
 // 初始化定时器
 // 全局只需要初始化一次
 func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix string, opts ...Option) *Cluster {
 
-	clusterOnceLimit.Do(func() {
-		op := newOptions(opts...)
+	// clusterOnceLimit.Do(func() {
+	op := newOptions(opts...)
 
-		clu = &Cluster{
-			ctx:         ctx,
-			redis:       red,
-			cache:       cachex.NewCache(),
-			timeout:     op.timeout,
-			logger:      op.logger,
-			keyPrefix:   keyPrefix,
-			location:    op.location,
-			priority:    op.priority,
-			lockKey:     "timer:cluster_globalLockKey" + keyPrefix, // 定时器的全局锁
-			zsetKey:     "timer:cluster_zsetKey" + keyPrefix,       // 有序集合
-			listKey:     "timer:cluster_listKey" + keyPrefix,       // 列表
-			setKey:      "timer:cluster_setKey" + keyPrefix,        // 重入集合
-			priorityKey: "timer:cluster_priorityKey" + keyPrefix,   // 全局优先级的key
+	clu := &Cluster{
+		ctx:         ctx,
+		redis:       red,
+		cache:       cachex.NewCache(),
+		timeout:     op.timeout,
+		logger:      op.logger,
+		keyPrefix:   keyPrefix,
+		location:    op.location,
+		priority:    op.priority,
+		lockKey:     "timer:cluster_globalLockKey" + keyPrefix, // 定时器的全局锁
+		zsetKey:     "timer:cluster_zsetKey" + keyPrefix,       // 有序集合
+		listKey:     "timer:cluster_listKey" + keyPrefix,       // 列表
+		setKey:      "timer:cluster_setKey" + keyPrefix,        // 重入集合
+		priorityKey: "timer:cluster_priorityKey" + keyPrefix,   // 全局优先级的key
+	}
+
+	// 设置锁的超时时间
+	lockx.InitOption(lockx.SetTimeout(op.timeout))
+
+	// 监听任务
+	go clu.watch()
+
+	priorityTime := time.NewTicker(time.Second * 10)
+	go func(ctx context.Context) {
+		clu.setPriority()
+	Loop:
+		for {
+			select {
+			case <-priorityTime.C:
+				clu.setPriority()
+			case <-ctx.Done():
+				break Loop
+			}
 		}
+	}(ctx)
 
-		// 设置锁的超时时间
-		lockx.InitOption(lockx.SetTimeout(op.timeout))
+	timer := time.NewTicker(time.Millisecond * 200)
 
-		// 监听任务
-		go clu.watch()
-
-		priorityTime := time.NewTicker(time.Second * 10)
-		go func(ctx context.Context) {
-			clu.setPriority()
-		Loop:
-			for {
-				select {
-				case <-priorityTime.C:
-					clu.setPriority()
-				case <-ctx.Done():
-					break Loop
+	go func(ctx context.Context) {
+	Loop:
+		for {
+			select {
+			case <-timer.C:
+				if !clu.canRun() {
+					continue
 				}
+				clu.getTask()
+				clu.getNextTime()
+			case <-ctx.Done():
+				break Loop
 			}
-		}(ctx)
-
-		timer := time.NewTicker(time.Millisecond * 200)
-
-		go func(ctx context.Context) {
-		Loop:
-			for {
-				select {
-				case <-timer.C:
-					if !clu.canRun() {
-						continue
-					}
-					clu.getTask()
-					clu.getNextTime()
-				case <-ctx.Done():
-					break Loop
-				}
-			}
-		}(ctx)
-	})
+		}
+	}(ctx)
+	// })
 	return clu
 }
 
@@ -181,7 +181,7 @@ func (l *Cluster) setPriority() bool {
 	`
 	priority := fmt.Sprintf("%d", l.priority)
 
-	expireTime := (time.Second*30).Seconds() // 设置过期时间为1分钟
+	expireTime := (time.Second * 30).Seconds() // 设置过期时间为1分钟
 	res, err := l.redis.Eval(l.ctx, script, []string{l.priorityKey}, priority, expireTime).Result()
 	if err != nil {
 		l.logger.Errorf(l.ctx, "设置全局优先级失败:%s", err.Error())

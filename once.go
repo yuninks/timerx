@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"runtime/debug"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -47,8 +46,8 @@ type Callback interface {
 	Worker(ctx context.Context, taskType string, taskId string, attachData interface{}) *OnceWorkerResp
 }
 
-var wo *Once = nil
-var once sync.Once
+// var wo *Once = nil
+// var once sync.Once
 
 type extendData struct {
 	Delay time.Duration
@@ -62,19 +61,19 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 	}
 
 	op := newOptions(opts...)
-	once.Do(func() {
-		wo = &Once{
-			ctx:       ctx,
-			logger:    op.logger,
-			zsetKey:   "timer:once_zsetkey" + keyPrefix,
-			listKey:   "timer:once_listkey" + keyPrefix,
-			redis:     re,
-			worker:    call,
-			keyPrefix: keyPrefix,
-		}
-		go wo.getTask()
-		go wo.watch()
-	})
+	// once.Do(func() {
+	wo := &Once{
+		ctx:       ctx,
+		logger:    op.logger,
+		zsetKey:   "timer:once_zsetkey" + keyPrefix,
+		listKey:   "timer:once_listkey" + keyPrefix,
+		redis:     re,
+		worker:    call,
+		keyPrefix: keyPrefix,
+	}
+	go wo.getTask()
+	go wo.watch()
+	// })
 
 	return wo
 }

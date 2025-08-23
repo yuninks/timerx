@@ -24,8 +24,8 @@ func main() {
 
 	// re()
 	// d()
-	cluster()
-	// once()
+	// cluster()
+	once()
 
 	select {}
 
@@ -46,11 +46,12 @@ func once() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	d = OnceData{
-		Num: 4,
-	}
+	// d = OnceData{
+	// 	Num: 4,
+	// }
+	dd := 123
 	// dy, _ = json.Marshal(d)
-	err = one.Create("test", "test4", 1*time.Second, d)
+	err = one.Save("test", "test4", 1*time.Second, dd)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -67,7 +68,11 @@ func (l OnceWorker) Worker(ctx context.Context, taskType string, taskId string, 
 	fmt.Println("执行时间:", time.Now().Format("2006-01-02 15:04:05"))
 	fmt.Println(taskType, taskId)
 
-	fmt.Printf("原来的参数：%+v\n", attachData)
+	fmt.Printf("原来的参数：%+v %T\n", attachData, attachData)
+
+	v, ok := attachData.(int64)
+	fmt.Println("vvvvvvv", v, ok)
+	// fmt.Printf()
 
 	// d := OnceData{}
 
@@ -89,7 +94,7 @@ func (l OnceWorker) Worker(ctx context.Context, taskType string, taskId string, 
 func cluster() {
 	client := getRedis()
 	ctx := context.Background()
-	cluster := timerx.InitCluster(ctx, client, "test",timerx.SetPriority(101))
+	cluster := timerx.InitCluster(ctx, client, "test", timerx.SetPriority(101))
 	err := cluster.EverySpace(ctx, "test_space", 1*time.Second, aa, "这是秒任务")
 	fmt.Println(err)
 	err = cluster.EveryMinute(ctx, "test_min", 15, aa, "这是分钟任务")
