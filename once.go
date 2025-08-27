@@ -48,7 +48,7 @@ type Callback interface {
 	// @param data interface{} 任务数据
 	// @return WorkerCode 任务执行结果
 	// @return time.Duration 任务执行时间间隔
-	Worker(ctx context.Context, taskType string, taskId string, attachData interface{}) *OnceWorkerResp
+	Worker(ctx context.Context, taskType OnceTaskType, taskId string, attachData interface{}) *OnceWorkerResp
 }
 
 // var wo *Once = nil
@@ -243,7 +243,7 @@ func (l *Once) doTask(ctx context.Context, key string) {
 	ed := extendData{}
 	json.Unmarshal([]byte(str), &ed)
 
-	resp := l.worker.Worker(ctx, s[0], s[1], ed.Data)
+	resp := l.worker.Worker(ctx, OnceTaskType(s[0]), s[1], ed.Data)
 	if resp == nil {
 		return
 	}
