@@ -7,18 +7,20 @@ import (
 )
 
 type Options struct {
-	logger   logger.Logger
-	location *time.Location
-	timeout  time.Duration
-	priority  int
+	logger      logger.Logger
+	location    *time.Location
+	timeout     time.Duration
+	usePriority bool
+	priorityVal int
 }
 
 func defaultOptions() Options {
 	return Options{
-		logger:   logger.NewLogger(),
-		location: time.Local,
-		timeout:  time.Hour,
-		priority: 0,
+		logger:      logger.NewLogger(),
+		location:    time.Local,
+		timeout:     time.Hour,
+		usePriority: false,
+		priorityVal: 0,
 	}
 }
 
@@ -56,6 +58,7 @@ func SetTimeout(d time.Duration) Option {
 // 设置优先级
 func SetPriority(priority int) Option {
 	return func(o *Options) {
-		o.priority = priority
+		o.usePriority = true
+		o.priorityVal = priority
 	}
 }

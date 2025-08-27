@@ -64,7 +64,7 @@ type OnceData struct {
 
 type OnceWorker struct{}
 
-func (l OnceWorker) Worker(ctx context.Context, taskType string, taskId string, attachData interface{}) *timerx.OnceWorkerResp {
+func (l OnceWorker) Worker(ctx context.Context, taskType timerx.OnceTaskType, taskId string, attachData interface{}) *timerx.OnceWorkerResp {
 	fmt.Println("执行时间:", time.Now().Format("2006-01-02 15:04:05"))
 	fmt.Println(taskType, taskId)
 

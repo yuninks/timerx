@@ -46,6 +46,7 @@ type Cluster struct {
 
 	priority    *priority.Priority // 全局优先级
 	priorityKey string             // 全局优先级的key
+	usePriority bool
 }
 
 // var clu *Cluster = nil
@@ -70,10 +71,14 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 		listKey:     "timer:cluster_listKey" + keyPrefix,       // 列表
 		setKey:      "timer:cluster_setKey" + keyPrefix,        // 重入集合
 		priorityKey: "timer:cluster_priorityKey" + keyPrefix,   // 全局优先级的key
+		usePriority: op.usePriority,
 	}
 
 	// 初始化优先级
-	clu.priority = priority.InitPriority(ctx, red, clu.priorityKey, op.priority, priority.SetLogger(clu.logger))
+
+	if clu.usePriority {
+		clu.priority = priority.InitPriority(ctx, red, clu.priorityKey, op.priorityVal, priority.SetLogger(clu.logger))
+	}
 
 	// 监听任务
 	go clu.watch()
@@ -85,9 +90,12 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 		for {
 			select {
 			case <-timer.C:
-				if !clu.priority.IsLatest(ctx) {
-					continue
+				if clu.usePriority {
+					if !clu.priority.IsLatest(ctx) {
+						continue
+					}
 				}
+
 				clu.getTask()
 				clu.getNextTime()
 			case <-ctx.Done():
@@ -358,11 +366,12 @@ func (c *Cluster) watch() {
 	// 执行任务
 	go func() {
 		for {
-
-			if !c.priority.IsLatest(c.ctx) {
-				// 如果全局优先级不满足就不执行
-				time.Sleep(time.Second * 5)
-				continue
+			if c.usePriority {
+				if !c.priority.IsLatest(c.ctx) {
+					// 如果全局优先级不满足就不执行
+					time.Sleep(time.Second * 5)
+					continue
+				}
 			}
 
 			keys, err := c.redis.BLPop(c.ctx, time.Second*10, c.listKey).Result()
@@ -392,11 +401,12 @@ func (c *Cluster) watch() {
 	// 处理重入任务
 	go func() {
 		for {
-
-			if !c.priority.IsLatest(c.ctx) {
-				// 如果全局优先级不满足就不执行
-				time.Sleep(time.Second * 5)
-				continue
+			if c.usePriority {
+				if !c.priority.IsLatest(c.ctx) {
+					// 如果全局优先级不满足就不执行
+					time.Sleep(time.Second * 5)
+					continue
+				}
 			}
 
 			res, err := c.redis.SPop(c.ctx, c.setKey).Result()

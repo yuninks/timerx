@@ -30,6 +30,7 @@ type Once struct {
 	keyPrefix   string
 	priority    *priority.Priority // 全局优先级
 	priorityKey string             // 全局优先级的key
+	usePriority bool
 }
 
 type OnceWorkerResp struct {
@@ -73,12 +74,15 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 		zsetKey:     "timer:once_zsetkey" + keyPrefix,
 		listKey:     "timer:once_listkey" + keyPrefix,
 		priorityKey: "timer:cluster_priorityKey" + keyPrefix, // 全局优先级的key
+		usePriority: op.usePriority,
 		redis:       re,
 		worker:      call,
 		keyPrefix:   keyPrefix,
 	}
 	// 初始化优先级
-	wo.priority = priority.InitPriority(ctx, re, wo.priorityKey, op.priority, priority.SetLogger(wo.logger))
+	if wo.usePriority {
+		wo.priority = priority.InitPriority(ctx, re, wo.priorityKey, op.priorityVal, priority.SetLogger(wo.logger))
+	}
 
 	go wo.getTask()
 	go wo.watch()
@@ -178,8 +182,10 @@ Loop:
 	for {
 		select {
 		case <-timer.C:
-			if !w.priority.IsLatest(w.ctx) {
-				continue
+			if w.usePriority {
+				if !w.priority.IsLatest(w.ctx) {
+					continue
+				}
 			}
 
 			script := `
@@ -202,9 +208,11 @@ Loop:
 // 监听任务
 func (w *Once) watch() {
 	for {
-		if !w.priority.IsLatest(w.ctx) {
-			time.Sleep(time.Second * 5)
-			continue
+		if w.usePriority {
+			if !w.priority.IsLatest(w.ctx) {
+				time.Sleep(time.Second * 5)
+				continue
+			}
 		}
 
 		keys, err := w.redis.BLPop(w.ctx, time.Second*10, w.listKey).Result()
