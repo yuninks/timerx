@@ -37,7 +37,7 @@ func PriorityByVersion(version string) (priority int64, err error) {
 		if val == "" {
 			return 0, ErrVersionFormat
 		}
-		i, err := strconv.ParseInt(val, 10, 32)
+		i, err := strconv.ParseInt(val, 10, 64)
 		if err != nil {
 			return 0, ErrVersionFormat
 		}

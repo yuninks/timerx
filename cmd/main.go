@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/yuninks/timerx"
+	"github.com/yuninks/timerx/priority"
 )
 
 func main() {
@@ -35,14 +36,24 @@ func once() {
 	client := getRedis()
 	ctx := context.Background()
 	w := OnceWorker{}
-	one := timerx.InitOnce(ctx, client, "test", w)
+
+	ver, err := priority.PriorityByVersion("v2.2.3.4.5")
+	if err != nil {
+		panic(err)
+	}
+
+	ops := []timerx.Option{
+		timerx.SetPriority(ver),
+	}
+
+	one := timerx.InitOnce(ctx, client, "test", w, ops...)
 
 	d := OnceData{
 		Num: 3,
 	}
 	// dy, _ := json.Marshal(d)
 
-	err := one.Create("test", "test3", 1*time.Second, d)
+	err = one.Create("test", "test3", 1*time.Second, d)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -51,7 +62,12 @@ func once() {
 	// }
 	dd := 123
 	// dy, _ = json.Marshal(d)
-	err = one.Save("test", "test4", 1*time.Second, dd)
+	err = one.Save("test", "test4", 2*time.Second, dd)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	err = one.Save("test", "test5", 5*time.Second, dd)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -87,7 +103,7 @@ func (l OnceWorker) Worker(ctx context.Context, taskType timerx.OnceTaskType, ta
 	return &timerx.OnceWorkerResp{
 		Retry:      true,
 		AttachData: attachData,
-		DelayTime:  1 * time.Second,
+		DelayTime:  10 * time.Second,
 	}
 }
 

@@ -11,7 +11,7 @@ type Options struct {
 	location    *time.Location
 	timeout     time.Duration
 	usePriority bool
-	priorityVal int
+	priorityVal int64
 }
 
 func defaultOptions() Options {
@@ -56,7 +56,7 @@ func SetTimeout(d time.Duration) Option {
 }
 
 // 设置优先级
-func SetPriority(priority int) Option {
+func SetPriority(priority int64) Option {
 	return func(o *Options) {
 		o.usePriority = true
 		o.priorityVal = priority

@@ -114,8 +114,9 @@ func (w *Once) Save(taskType OnceTaskType, taskId string, delayTime time.Duratio
 	b, _ := json.Marshal(ed)
 
 	// 写入附加数据
-	_, err := w.redis.SetEX(w.ctx, w.keyPrefix+redisKey, b, delayTime+time.Second*5).Result()
+	_, err := w.redis.SetEX(w.ctx, w.keyPrefix+redisKey, b, delayTime+time.Minute*30).Result()
 	if err != nil {
+		w.logger.Errorf(w.ctx, "写入附加数据失败:%s", err.Error())
 		return err
 	}
 
@@ -130,6 +131,13 @@ func (w *Once) Save(taskType OnceTaskType, taskId string, delayTime time.Duratio
 
 // 添加任务(不覆盖)
 func (l *Once) Create(taskType OnceTaskType, taskId string, delayTime time.Duration, attachData interface{}) error {
+	if delayTime.Abs() != delayTime {
+		return fmt.Errorf("时间间隔不能为负数")
+	}
+	if delayTime == 0 {
+		return fmt.Errorf("时间间隔不能为0")
+	}
+	
 	redisKey := fmt.Sprintf("%s[:]%s", taskType, taskId)
 	// 判断有序集合Key是否存在，存在则报错，不存在则写入
 	if l.redis.ZScore(l.ctx, l.zsetKey, redisKey).Val() == 0 {
@@ -141,8 +149,9 @@ func (l *Once) Create(taskType OnceTaskType, taskId string, delayTime time.Durat
 		b, _ := json.Marshal(ed)
 
 		// 写入附加数据
-		_, err := l.redis.SetEX(l.ctx, l.keyPrefix+redisKey, b, delayTime+time.Second*5).Result()
+		_, err := l.redis.SetEX(l.ctx, l.keyPrefix+redisKey, b, delayTime+time.Minute*30).Result()
 		if err != nil {
+			l.logger.Errorf(l.ctx, "写入附加数据失败:%s", err.Error())
 			return err
 		}
 		_, err = l.redis.ZAdd(l.ctx, l.zsetKey, &redis.Z{

@@ -15,16 +15,16 @@ import (
 
 type Priority struct {
 	ctx            context.Context
-	priority       int // 优先级
+	priority       int64 // 优先级
 	redis          redis.UniversalClient
 	redisKey       string
 	logger         logger.Logger
 	expireTime     time.Duration
 	updateInterval time.Duration // 更新间隔
-	deadTime       int64         // 缓存时间戳，单位秒
+	deadTime       *int64        // 缓存时间戳，单位秒
 }
 
-func InitPriority(ctx context.Context, re redis.UniversalClient, keyPrefix string, priority int, opts ...Option) *Priority {
+func InitPriority(ctx context.Context, re redis.UniversalClient, keyPrefix string, priority int64, opts ...Option) *Priority {
 	conf := newOptions(opts...)
 
 	pro := &Priority{
@@ -35,6 +35,7 @@ func InitPriority(ctx context.Context, re redis.UniversalClient, keyPrefix strin
 		redisKey:       "timer:priority_" + keyPrefix,
 		expireTime:     conf.expireTime,
 		updateInterval: conf.updateInterval,
+		deadTime:       new(int64),
 	}
 
 	// 更新间隔
@@ -55,9 +56,13 @@ func InitPriority(ctx context.Context, re redis.UniversalClient, keyPrefix strin
 	return pro
 }
 
-func (l *Priority) IsLatest(ctx context.Context) bool {
+func (l *Priority) IsLatest(ctx context.Context) (b bool) {
+	// defer func() {
+	// 	l.logger.Infof(l.ctx, "当前优先级:%d bool:%v", l.priority, b)
+	// }()
+
 	// 加缓存
-	if atomic.LoadInt64(&l.deadTime) > time.Now().Unix() {
+	if atomic.LoadInt64(l.deadTime) > time.Now().Unix() {
 		return true
 	}
 
@@ -71,7 +76,7 @@ func (l *Priority) IsLatest(ctx context.Context) bool {
 		return false
 	}
 
-	strPriority, err := strconv.Atoi(str)
+	strPriority, err := strconv.ParseInt(str, 10, 64)
 	if err != nil {
 		l.logger.Errorf(l.ctx, "全局优先级转换失败:%s", err.Error())
 		return false
@@ -83,6 +88,7 @@ func (l *Priority) IsLatest(ctx context.Context) bool {
 }
 
 func (l *Priority) setPriority() bool {
+
 	// redis lua脚本
 	// 如果redis的可以不存在则设置值，如果存在且redis内的值比当前大则不处理，如果存在redis内的值比当前小或等于则更新值且更新ttl
 	script := `
@@ -142,7 +148,7 @@ func (l *Priority) setPriority() bool {
 	if operationResult == "SET" || operationResult == "UPDATE" {
 		l.logger.Infof(l.ctx, "设置全局优先级成功:%s", priority)
 
-		atomic.StoreInt64(&l.deadTime, time.Now().Add(l.updateInterval).Unix())
+		atomic.StoreInt64(l.deadTime, time.Now().Add(l.updateInterval).Unix())
 
 		return true
 	}
