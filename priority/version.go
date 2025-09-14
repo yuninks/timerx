@@ -41,7 +41,7 @@ func PriorityByVersion(version string) (priority int64, err error) {
 		if err != nil {
 			return 0, ErrVersionFormat
 		}
-		if i <= 0 || i > 999 {
+		if i < 0 || i > 999 {
 			return 0, ErrVersionFormat
 		}
 		p := (4 - key) * 3
