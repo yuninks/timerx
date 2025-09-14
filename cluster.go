@@ -464,7 +464,12 @@ func (c *Cluster) doTask(ctx context.Context, taskId string) {
 		c.logger.Errorf(ctx, "doTask timer:任务不存在:%s", taskId)
 		return
 	}
-	t := val.(timerStr)
+	t,ok := val.(timerStr)
+	if !ok {
+		c.logger.Errorf(ctx, "doTask timer:任务不存在:%s", taskId)
+		return
+	}
+
 
 	// 这里加一个全局锁
 	lock := lockx.NewGlobalLock(ctx, c.redis, taskId)

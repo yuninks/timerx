@@ -6,11 +6,11 @@ import (
 )
 
 type timerStr struct {
-	Callback   func(ctx context.Context, extendData interface{}) error        // 需要回调的方法
-	CanRunning chan (struct{}) // 是否允许执行(only single)
-	TaskId     string          // 任务ID 全局唯一键(only cluster)
-	ExtendData interface{}     // 附加参数
-	JobData    *JobData        // 任务时间数据
+	Callback   func(ctx context.Context, extendData interface{}) error // 需要回调的方法
+	CanRunning chan (struct{})                                         // 是否允许执行(only single)
+	TaskId     string                                                  // 任务ID 全局唯一键(only cluster)
+	ExtendData interface{}                                             // 附加参数
+	JobData    *JobData                                                // 任务时间数据
 }
 
 type JobType string
@@ -27,6 +27,7 @@ const (
 
 type JobData struct {
 	JobType      JobType       // 任务类型
+	TaskId       string        // 任务ID 全局唯一键(only cluster)
 	NextTime     time.Time     // 下次执行时间
 	BaseTime     time.Time     // 基准时间(间隔的基准时间)
 	CreateTime   time.Time     // 任务创建时间
