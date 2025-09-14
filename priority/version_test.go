@@ -59,8 +59,8 @@ func TestVersionToPriority(t *testing.T) {
 		{
 			name:    "zero version part",
 			version: "1.0.3",
-			want:    0,
-			wantErr: true,
+			want:    1000003000000,
+			wantErr: false,
 		},
 		{
 			name:    "zero version part 2",

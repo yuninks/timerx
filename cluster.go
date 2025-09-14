@@ -283,9 +283,11 @@ func (c *Cluster) getNextTime() {
 	clusterWorkerList.Range(func(key, value interface{}) bool {
 		val := value.(timerStr)
 
-		nextTime, _ := GetNextTime(time.Now().In(c.location), *val.JobData)
-
-		// fmt.Println(val.ExtendData, val.JobData, nextTime)
+		nextTime, err := GetNextTime(time.Now().In(c.location), *val.JobData)
+		if err != nil {
+			c.logger.Errorf(c.ctx, "获取下次执行时间失败:%s %s", val.TaskId, err.Error())
+			return true
+		}
 
 		// 内部判定是否重复
 		cacheKey := fmt.Sprintf("%s_%s_%d", c.keyPrefix, val.TaskId, nextTime.UnixMilli())
@@ -302,7 +304,6 @@ func (c *Cluster) getNextTime() {
 			// 重试2次还是失败就不执行了
 			return true
 		}
-		// fmt.Println("计算时间1", val.ExtendData, time.UnixMilli(nextTime.UnixMilli()).Format("2006-01-02 15:04:05"))
 
 		// redis lua脚本，尝试设置nx锁时间为一分钟，如果能设置进去则添加到有序集合zsetKey
 		script := `
@@ -464,12 +465,11 @@ func (c *Cluster) doTask(ctx context.Context, taskId string) {
 		c.logger.Errorf(ctx, "doTask timer:任务不存在:%s", taskId)
 		return
 	}
-	t,ok := val.(timerStr)
+	t, ok := val.(timerStr)
 	if !ok {
 		c.logger.Errorf(ctx, "doTask timer:任务不存在:%s", taskId)
 		return
 	}
-
 
 	// 这里加一个全局锁
 	lock := lockx.NewGlobalLock(ctx, c.redis, taskId)
