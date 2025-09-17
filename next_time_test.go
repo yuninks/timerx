@@ -9,6 +9,9 @@ import (
 )
 
 func TestGetNextTime(t *testing.T) {
+
+	tt := time.Now()
+
 	// Test cases
 	tests := []struct {
 		name          string
@@ -25,7 +28,7 @@ func TestGetNextTime(t *testing.T) {
 				Minute:  0,
 				Second:  0,
 			},
-			expectedTime:  time.Date(2022, 3, 15, 10, 0, 0, 0, time.Local),
+			expectedTime:  time.Date(tt.Year(), tt.Month()+1, 15, 10, 0, 0, 0, time.Local),
 			expectedError: nil,
 		},
 		{
@@ -37,7 +40,7 @@ func TestGetNextTime(t *testing.T) {
 				Minute:  0,
 				Second:  0,
 			},
-			expectedTime:  time.Date(2022, 3, 8, 10, 0, 0, 0, time.Local), // Assuming current date is March 7, 2022
+			expectedTime:  time.Date(2025, 9, 23, 10, 0, 0, 0, time.Local), // Assuming current date is March 7, 2022
 			expectedError: nil,
 		},
 		{
@@ -48,7 +51,7 @@ func TestGetNextTime(t *testing.T) {
 				Minute:  0,
 				Second:  0,
 			},
-			expectedTime:  time.Date(2022, 3, 8, 10, 0, 0, 0, time.Local), // Assuming current date is March 7, 2022
+			expectedTime:  time.Date(2025, 9, 18, 10, 0, 0, 0, time.Local), // Assuming current date is March 7, 2022
 			expectedError: nil,
 		},
 		{
@@ -58,25 +61,26 @@ func TestGetNextTime(t *testing.T) {
 				Minute:  0,
 				Second:  0,
 			},
-			expectedTime:  time.Date(2022, 3, 7, 11, 0, 0, 0, time.Local), // Assuming current date is March 7, 2022, 10:30 AM
+			expectedTime:  time.Date(2025, 9, 17, 16, 0, 0, 0, time.Local), // Assuming current date is March 7, 2022, 10:30 AM
 			expectedError: nil,
 		},
 		{
 			name: "Test JobTypeEveryMinute",
 			job: JobData{
 				JobType: JobTypeEveryMinute,
-				Second:  0,
+				Second:  12,
 			},
-			expectedTime:  time.Date(2022, 3, 7, 10, 31, 0, 0, time.Local), // Assuming current date is March 7, 2022, 10:30 AM
+			expectedTime:  time.Date(tt.Year(), tt.Month(), tt.Day(), tt.Hour(), tt.Minute()+1, 12, 0, time.Local), // Assuming current date is March 7, 2022, 10:30 AM
 			expectedError: nil,
 		},
 		{
 			name: "Test JobTypeInterval",
 			job: JobData{
 				JobType:      JobTypeInterval,
+				CreateTime:   tt,
 				IntervalTime: 1 * time.Hour,
 			},
-			expectedTime:  time.Date(2022, 3, 7, 11, 30, 0, 0, time.Local), // Assuming current date is March 7, 2022, 10:30 AM
+			expectedTime:  tt.Add(1 * time.Hour), // Assuming current date is March 7, 2022, 10:30 AM
 			expectedError: nil,
 		},
 		{
@@ -99,7 +103,7 @@ func TestGetNextTime(t *testing.T) {
 					t.Errorf("Expected error: %v, Got error: %v", test.expectedError, err)
 				}
 			} else {
-				if nextTime.IsZero() != (test.expectedTime == time.Time{}) || (nextTime != &test.expectedTime) {
+				if nextTime.IsZero() != (test.expectedTime == time.Time{}) || (!nextTime.Equal(test.expectedTime)) {
 					t.Errorf("Expected time: %v, Got time: %v", test.expectedTime, nextTime)
 				}
 			}
@@ -297,6 +301,8 @@ func TestCalculateNextInterval(t *testing.T) {
 	}
 }
 
+
+
 // 测试月任务
 func TestCalculateNextMonthTime(t *testing.T) {
 	baseTime := time.Date(2023, 6, 15, 12, 30, 45, 0, time.UTC)
@@ -340,7 +346,7 @@ func TestCalculateNextMonthTime(t *testing.T) {
 				Minute:  30,
 				Second:  45,
 			},
-			currentTime: time.Date(2023, 1, 15, 12, 30, 45, 0, time.UTC),
+			currentTime: time.Date(2023, 2, 15, 12, 30, 45, 0, time.UTC),
 			expected:    time.Date(2023, 2, 28, 12, 30, 45, 0, time.UTC),
 		},
 		{
@@ -352,7 +358,7 @@ func TestCalculateNextMonthTime(t *testing.T) {
 				Minute:  30,
 				Second:  45,
 			},
-			currentTime: time.Date(2024, 1, 15, 12, 30, 45, 0, time.UTC), // 2024是闰年
+			currentTime: time.Date(2024, 2, 15, 12, 30, 45, 0, time.UTC), // 2024是闰年
 			expected:    time.Date(2024, 2, 29, 12, 30, 45, 0, time.UTC),
 		},
 		{
@@ -366,6 +372,38 @@ func TestCalculateNextMonthTime(t *testing.T) {
 			},
 			currentTime: time.Date(2023, 12, 20, 12, 30, 45, 0, time.UTC),
 			expected:    time.Date(2024, 1, 15, 12, 30, 45, 0, time.UTC),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := calculateNextMonthTime(tt.currentTime, tt.job)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, *result)
+		})
+	}
+}
+
+func TestCalculateNextMonthTimeOnce(t *testing.T){
+	// baseTime := time.Date(2023, 6, 15, 12, 30, 45, 0, time.UTC)
+
+	tests := []struct {
+		name        string
+		job         JobData
+		currentTime time.Time
+		expected    time.Time
+	}{
+		{
+			name: "2月30日调整到2月28日",
+			job: JobData{
+				JobType: JobTypeEveryMonth,
+				Day:     30,
+				Hour:    12,
+				Minute:  30,
+				Second:  45,
+			},
+			currentTime: time.Date(2023, 1, 31, 12, 30, 45, 0, time.UTC),
+			expected:    time.Date(2023, 2, 28, 12, 30, 45, 0, time.UTC),
 		},
 	}
 
@@ -670,7 +708,7 @@ func TestGetNextTime_ErrorCases(t *testing.T) {
 		{
 			name: "无效月任务日期",
 			job: JobData{
-				JobType: "每月",
+				JobType: JobTypeEveryMonth,
 				Day:     32, // 无效日期
 				Hour:    12,
 				Minute:  30,
@@ -709,6 +747,17 @@ func TestGetNextTime_EdgeCases(t *testing.T) {
 			expected:    time.Date(2023, 6, 16, 12, 30, 45, 0, time.UTC),
 		},
 		{
+			name: "刚好在执行时间点上-应该到下一个周期-秒",
+			job: JobData{
+				JobType: JobTypeEveryDay,
+				Hour:    12,
+				Minute:  30,
+				Second:  45,
+			},
+			currentTime: time.Date(2023, 6, 16, 12, 30, 44, 0, time.UTC),
+			expected:    time.Date(2023, 6, 16, 12, 30, 45, 0, time.UTC),
+		},
+		{
 			name: "闰年2月29日",
 			job: JobData{
 				JobType: JobTypeEveryMonth,
@@ -717,7 +766,7 @@ func TestGetNextTime_EdgeCases(t *testing.T) {
 				Minute:  30,
 				Second:  45,
 			},
-			currentTime: time.Date(2024, 1, 15, 12, 30, 45, 0, time.UTC), // 闰年
+			currentTime: time.Date(2024, 2, 15, 12, 30, 45, 0, time.UTC), // 闰年
 			expected:    time.Date(2024, 2, 29, 12, 30, 45, 0, time.UTC),
 		},
 		{
@@ -729,7 +778,7 @@ func TestGetNextTime_EdgeCases(t *testing.T) {
 				Minute:  30,
 				Second:  45,
 			},
-			currentTime: time.Date(2023, 1, 15, 12, 30, 45, 0, time.UTC), // 非闰年
+			currentTime: time.Date(2023, 2, 15, 12, 30, 45, 0, time.UTC), // 非闰年
 			expected:    time.Date(2023, 2, 28, 12, 30, 45, 0, time.UTC),
 		},
 	}

@@ -111,12 +111,14 @@ func calculateNextInterval(t time.Time, job JobData) (*time.Time, error) {
 }
 
 func calculateNextMonthTime(t time.Time, job JobData) (*time.Time, error) {
-	// 尝试光剑本月的执行四件
+	// 尝试当月是否有这个天数
+	// time.Date(2025, 2, 30, 0, 0, 0, 0, t.Location()) => 2025-03-02 00:00:00 +0800 CST 当月不足往后补
 	currentMonthTime := time.Date(t.Year(), t.Month(), job.Day, job.Hour, job.Minute, job.Second, 0, t.Location())
 
 	// 如果日期无效（比如2月30号），则调整到该月最后一天
 	if currentMonthTime.Day() != job.Day {
-		// 获取该月的最后一天
+		// 获取该月的最后一天(0日就是上个月最后一天)
+		// time.Date(2025,2,0,0,0,0,0,time.Local) => 2025-01-31 00:00:00 +0800 CST
 		lastDay := time.Date(t.Year(), t.Month()+1, 0, 0, 0, 0, 0, t.Location()).Day()
 		if job.Day > lastDay {
 			currentMonthTime = time.Date(t.Year(), t.Month(), lastDay, job.Hour, job.Minute, job.Second, 0, t.Location())
