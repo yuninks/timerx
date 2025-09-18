@@ -21,10 +21,9 @@ import (
 // 这是基于Redis的定时任务调度器，能够有效的在服务集群里面调度任务，避免了单点压力过高或单点故障问题
 // 由于所有的服务代码是一致的，也就是一个定时任务将在所有的服务都有注册，具体调度到哪个服务运行看调度结果
 
-// 暂不支持删除定时器，因为这个定时器的设计是基于全局的，如果删除了，那么其他服务就不知道了
-
 type Cluster struct {
 	ctx       context.Context       // context
+	cancel    context.CancelFunc    // 取消函数
 	redis     redis.UniversalClient // redis
 	cache     *cachex.Cache         // 本地缓存
 	timeout   time.Duration         // job执行超时时间
@@ -56,10 +55,12 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 	// clusterOnceLimit.Do(func() {
 	op := newOptions(opts...)
 
-	// u, _ := uuid.NewV7()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	clu := &Cluster{
 		ctx:         ctx,
+		cancel:      cancel,
 		redis:       red,
 		cache:       cachex.NewCache(),
 		timeout:     op.timeout,
@@ -86,6 +87,12 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 	clu.startDaemon()
 
 	return clu
+}
+
+// Stop 停止集群定时器
+func (c *Cluster) Stop() {
+	close(c.stopChan)
+	c.wg.Wait()
 }
 
 // 守护任务
@@ -154,10 +161,9 @@ func (l *Cluster) getLeaderLock() error {
 	l.logger.Infof(l.ctx, "getLeaderLock Instance %s became leader", lock.GetValue())
 
 	// 等待超时退出
-	select {
-	case <-lock.GetCtx().Done():
-		return nil
-	}
+	<-lock.GetCtx().Done()
+	return nil
+
 }
 
 // isCurrentLeader 检查当前实例是否是leader
@@ -381,7 +387,7 @@ func (l *Cluster) calculateNextTimes() {
 			return 1
 			`
 
-		lockKey := fmt.Sprintf("%s:lock:calc:%s:%d", l.keyPrefix, val.TaskId, nextTime.UnixNano())
+		lockKey := fmt.Sprintf("%s:lock:calc:%s:%d", l.keyPrefix, val.TaskId, nextTime.UnixMilli())
 		_, err = pipe.Eval(l.ctx, script, []string{l.zsetKey, lockKey},
 			nextTime.UnixMilli(), val.TaskId, 60).Result()
 		if err != nil {

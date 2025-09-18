@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -26,9 +27,24 @@ func main() {
 	// re()
 	// d()
 	// cluster()
-	once()
+	// once()
+	prioritys()
 
 	select {}
+
+}
+
+func prioritys() {
+
+	client := getRedis()
+	ctx := context.Background()
+	pro := priority.InitPriority(ctx, client, "test", 10)
+
+	for {
+		b := pro.IsLatest(ctx)
+		fmt.Println("isLatest", b)
+		time.Sleep(time.Millisecond*100)
+	}
 
 }
 
@@ -172,9 +188,24 @@ func re() {
 }
 
 func aa(ctx context.Context, data interface{}) error {
+
 	fmt.Println("-执行时间:", data, time.Now().Format("2006-01-02 15:04:05"))
 	// fmt.Println(data)
 	// time.Sleep(time.Second * 5)
+
+	// 追加到文件
+	file, err := os.OpenFile("./test.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Println("打开文件失败:", err)
+		return err
+	}
+	defer file.Close()
+	_, err = file.WriteString(fmt.Sprintf("-执行时间:%v %s\n", data, time.Now().Format("2006-01-02 15:04:05")))
+	if err != nil {
+		fmt.Println("写入文件失败:", err)
+		return err
+	}
+
 	return nil
 }
 

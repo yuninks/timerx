@@ -7,6 +7,7 @@ import (
 )
 
 type Options struct {
+	getInterval    time.Duration // 查询周期
 	updateInterval time.Duration // 更新间隔
 	expireTime     time.Duration // 有效时间
 	logger         logger.Logger
@@ -14,8 +15,9 @@ type Options struct {
 
 func defaultOptions() Options {
 	return Options{
-		updateInterval: time.Second * 10,
-		expireTime:     time.Second * 32,
+		getInterval:    time.Second * 2,
+		updateInterval: time.Second * 4,
+		expireTime:     time.Second * 8,
 		logger:         logger.NewLogger(),
 	}
 }
@@ -36,13 +38,14 @@ func SetLogger(log logger.Logger) Option {
 	}
 }
 
-// 有效时间是3个周期
+// 更新周期
 func SetUpdateInterval(d time.Duration) Option {
 	if d.Abs() < time.Second {
-		d = time.Second * 10
+		d = time.Second * 5
 	}
 	return func(o *Options) {
 		o.updateInterval = d
-		o.expireTime = d*3 + time.Second
+		o.expireTime = d*2 + time.Second
+		o.getInterval = d / 3
 	}
 }
