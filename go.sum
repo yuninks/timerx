@@ -31,8 +31,8 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/yuninks/cachex v1.0.5 h1:Y2NmTsuEgwEVYb7FVFh5tUN67kmrUioeksQqLbOAwsM=
 github.com/yuninks/cachex v1.0.5/go.mod h1:5357qz18UvHTJSgZzkMamUzZoFzGeKG9+4tIUBXRSVM=
-github.com/yuninks/lockx v1.1.0 h1:Qkf+RqYQ6Vr242h3dWxWJqIvIp9/6j5ijTkbuWvrgqU=
-github.com/yuninks/lockx v1.1.0/go.mod h1:Y/MtD+4Zc79/0Qsdd9c99jxW5WWxXVZlxcJyYJFJy5A=
+github.com/yuninks/lockx v1.1.1 h1:b687xJrBblvquP9czP3iiW62VPr/RerJbQMIi0zQizs=
+github.com/yuninks/lockx v1.1.1/go.mod h1:tM46x/fp9046YnTIeddmUhkxFjJ/f0g4J+1zdaGKfd8=
 golang.org/x/net v0.0.0-20210428140749-89ef3d95e781 h1:DzZ89McO9/gWPsQXS/FVKAlG02ZjaQ6AlZRBimEYOd0=
 golang.org/x/net v0.0.0-20210428140749-89ef3d95e781/go.mod h1:OJAsFXCWl8Ukc7SiCT/9KSuxbyM7479/AVlXFRxuMCk=
 golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e h1:fLOSk5Q00efkSvAm+4xcoXD+RRmLmmulPn5I3Y9F2EM=
