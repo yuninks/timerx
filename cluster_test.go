@@ -14,6 +14,8 @@ func TestCluster_AddEveryMonth(t *testing.T) {
 	ctx := context.Background()
 	redis := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
+		Password: "123456",
+		DB: 0,
 	})
 	defer redis.Close()
 
@@ -34,6 +36,8 @@ func TestCluster_AddEveryMonth(t *testing.T) {
 	if err != nil {
 		t.Errorf("AddEveryMonth failed, err: %v", err)
 	}
+
+	time.Sleep(time.Second * 10)
 
 	// TODO: verify the job is added to the cluster and can be executed at the specified time
 }
@@ -154,6 +158,8 @@ func TestCluster_Add(t *testing.T) {
 	fmt.Println("66666")
 	redis := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
+		Password: "123456",
+		DB: 0,
 	})
 	defer redis.Close()
 
@@ -172,8 +178,9 @@ func TestCluster_Add(t *testing.T) {
 
 	err := cluster.EverySpace(ctx, taskId, dur, callback, extendData)
 	if err != nil {
-		t.Errorf("Add failed, err: %v", err)
+		t.Errorf("Add failed,1 err: %v", err)
 	}
+
 
 	time.Sleep(time.Second * 20)
 

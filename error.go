@@ -22,4 +22,6 @@ var (
 	ErrCreateTime = errors.New("create time can not be empty")
 	// 间隔时间必须大于0
 	ErrIntervalTime = errors.New("interval time must be greater than 0")
+	// 任务Id已存在
+	ErrTaskIdExists = errors.New("taskId already exists")
 )
