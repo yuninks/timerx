@@ -102,6 +102,9 @@ func calculateNextInterval(t time.Time, job JobData) (*time.Time, error) {
 	// 计算下一个执行时间
 	next := job.CreateTime.Add((intervals + 1) * job.IntervalTime)
 
+	// 需要整的
+	next = next.Round(job.IntervalTime)
+
 	// 确保下次执行时间不早于当前时间
 	if next.Before(t) || next.Equal(t) {
 		next = next.Add(job.IntervalTime)
