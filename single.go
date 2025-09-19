@@ -405,7 +405,7 @@ func (s *Single) executeTask(ctx context.Context, timer timerStr, originTime tim
 		// 检查任务是否已执行
 		taskKey := fmt.Sprintf("%s:%d", timer.TaskId, originTime.UnixNano())
 		if _, loaded := s.hasRun.LoadOrStore(taskKey, time.Now()); loaded {
-			s.logger.Warnf(ctx, "timer: 任务已执行，跳过本次执行 %s", timer.TaskId)
+			s.logger.Errorf(ctx, "timer: 任务已执行，跳过本次执行 %s", timer.TaskId)
 			return
 		}
 

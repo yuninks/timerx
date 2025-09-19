@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/yuninks/loggerx"
 	"github.com/yuninks/timerx"
 	"github.com/yuninks/timerx/priority"
 )
@@ -26,9 +27,9 @@ func main() {
 
 	// re()
 	// d()
-	// cluster()
+	cluster()
 	// once()
-	prioritys()
+	// prioritys()
 
 	select {}
 
@@ -43,7 +44,7 @@ func prioritys() {
 	for {
 		b := pro.IsLatest(ctx)
 		fmt.Println("isLatest", b)
-		time.Sleep(time.Millisecond*100)
+		time.Sleep(time.Millisecond * 100)
 	}
 
 }
@@ -126,14 +127,32 @@ func (l OnceWorker) Worker(ctx context.Context, taskType timerx.OnceTaskType, ta
 func cluster() {
 	client := getRedis()
 	ctx := context.Background()
-	cluster := timerx.InitCluster(ctx, client, "test", timerx.SetPriority(101))
-	err := cluster.EverySpace(ctx, "test_space", 1*time.Second, aa, "这是秒任务")
+
+	log := loggerx.NewLogger(ctx,loggerx.SetToConsole(),loggerx.SetEscapeHTML(false))
+
+	cluster := timerx.InitCluster(ctx, client, "test", timerx.SetPriority(103), timerx.SetLogger(log))
+	err := cluster.EverySpace(ctx, "test_space1", 1*time.Second, aa, "这是秒任务1")
 	fmt.Println(err)
-	err = cluster.EveryMinute(ctx, "test_min", 15, aa, "这是分钟任务")
+	err = cluster.EverySpace(ctx, "test_space2", 2*time.Second, aa, "这是秒任务2")
 	fmt.Println(err)
-	err = cluster.EveryHour(ctx, "test_hour", 30, 0, aa, "这是小时任务")
+	err = cluster.EverySpace(ctx, "test_space3", 5*time.Second, aa, "这是秒任务3")
 	fmt.Println(err)
-	err = cluster.EveryDay(ctx, "test_day", 11, 0, 0, aa, "这是天任务")
+
+	err = cluster.EveryMinute(ctx, "test_min1", 15, aa, "这是分钟任务1")
+	fmt.Println(err)
+	err = cluster.EveryMinute(ctx, "test_min2", 30, aa, "这是分钟任务2")
+	fmt.Println(err)
+
+	err = cluster.EveryHour(ctx, "test_hour1", 30, 0, aa, "这是小时任务1")
+	fmt.Println(err)
+	err = cluster.EveryHour(ctx, "test_hour2", 30, 15, aa, "这是小时任务2")
+	fmt.Println(err)
+
+	err = cluster.EveryDay(ctx, "test_day1", 5, 0, 0, aa, "这是天任务1")
+	fmt.Println(err)
+	err = cluster.EveryDay(ctx, "test_day2", 9, 20, 0, aa, "这是天任务2")
+	fmt.Println(err)
+	err = cluster.EveryDay(ctx, "test_day3", 10, 30, 30, aa, "这是天任务3")
 	fmt.Println(err)
 }
 

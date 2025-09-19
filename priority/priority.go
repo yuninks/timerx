@@ -76,7 +76,7 @@ func (p *Priority) runUpdateLoop() {
 
 	// 立即尝试设置一次优先级
 	if _, err := p.setPriority(); err != nil {
-		p.logger.Warnf(p.ctx, "Initial priority set failed: %v", err)
+		p.logger.Errorf(p.ctx, "Initial priority set failed: %v", err)
 	}
 
 	ticker := time.NewTicker(p.setInterval)
@@ -86,7 +86,7 @@ func (p *Priority) runUpdateLoop() {
 		select {
 		case <-ticker.C:
 			if _, err := p.setPriority(); err != nil {
-				p.logger.Warnf(p.ctx, "Priority update failed: %v", err)
+				p.logger.Errorf(p.ctx, "Priority update failed: %v", err)
 			}
 		case <-p.ctx.Done():
 			return
