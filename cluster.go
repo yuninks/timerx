@@ -38,6 +38,7 @@ type Cluster struct {
 	setKey       string // 重入集合的key
 	heartbeatKey string // 心跳的Key
 	leaderKey    string // 上报当前的Leader
+	executeInfoKey string // 执行情况的key
 
 	priority    *priority.Priority // 全局优先级
 	priorityKey string             // 全局优先级的key
@@ -80,6 +81,7 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 		leaderUniLockKey: "timer:cluster_leaderUniLockKey" + keyPrefix, // 领导唯一锁
 		leaderKey:        "timer:cluster_leaderKey" + keyPrefix,        // 上报当前Leader
 		heartbeatKey:     "timer:cluster_heartbeatKey" + keyPrefix,     // 心跳 有序集合
+		executeInfoKey:   "timer:cluster_executeInfoKey" + keyPrefix,   // 执行情况的key 有序集合
 		usePriority:      op.usePriority,
 		stopChan:         make(chan struct{}),
 		instanceId:       U.String(),
@@ -198,7 +200,13 @@ func (l *Cluster) cleanHeartbeat(cleanSelf bool) error {
 	if cleanSelf {
 		return l.redis.ZRem(l.ctx, l.heartbeatKey, l.instanceId).Err()
 	}
-	return l.redis.ZRemRangeByScore(l.ctx, l.heartbeatKey, "0", strconv.FormatInt(time.Now().Add(-15*time.Second).UnixMilli(), 10)).Err()
+
+	// 移除心跳
+	l.redis.ZRemRangeByScore(l.ctx, l.heartbeatKey, "0", strconv.FormatInt(time.Now().Add(-15*time.Second).UnixMilli(), 10)).Err()
+
+	// 移除执行信息
+	l.redis.ZRemRangeByScore(l.ctx, l.executeInfoKey, "0", strconv.FormatInt(time.Now().Add(-15*time.Minute).UnixMilli(), 10)).Err()
+	return nil
 }
 
 // 领导选举
@@ -595,9 +603,23 @@ type ReJobData struct {
 
 // 执行任务
 func (l *Cluster) processTask(taskId string) {
+	begin := time.Now()
 
 	ctx, cancel := context.WithTimeout(l.ctx, l.timeout)
 	defer cancel()
+
+	u, _ := uuid.NewV7()
+
+	ctx = context.WithValue(ctx, "trace_id", u.String())
+
+	l.logger.Infof(ctx, "doTask timer begin taskId:%s", taskId)
+
+	// 上报执行情况
+	executeVal := fmt.Sprintf("%s|%s|%s",taskId,l.instanceId,begin.Format(time.RFC3339Nano))
+	l.redis.ZAdd(ctx,l.executeInfoKey,&redis.Z{
+		Score: float64(begin.UnixMilli()),
+		Member: executeVal,
+	})
 
 	val, ok := l.workerList.Load(taskId)
 	if !ok {
@@ -622,18 +644,16 @@ func (l *Cluster) processTask(taskId string) {
 	}
 	defer lock.Unlock()
 
-	begin := time.Now()
+
 	defer func() {
 		if err := recover(); err != nil {
-			l.logger.Errorf(ctx, "timer:回调任务panic err:%+v stack:%s", err, string(debug.Stack()))
+			l.logger.Errorf(ctx, "doTask timer:回调任务panic err:%+v stack:%s", err, string(debug.Stack()))
 		}
 
 		l.logger.Infof(ctx, "doTask timer:执行任务耗时:%s %dms", taskId, time.Since(begin).Milliseconds())
 	}()
 
-	u, _ := uuid.NewV7()
 
-	ctx = context.WithValue(ctx, "trace_id", u.String())
 
 	// 执行任务
 	if err := t.Callback(ctx, t.ExtendData); err != nil {
@@ -641,5 +661,4 @@ func (l *Cluster) processTask(taskId string) {
 		return
 	}
 
-	l.logger.Infof(ctx, "doTask timer:执行任务成功:%s", taskId)
 }
