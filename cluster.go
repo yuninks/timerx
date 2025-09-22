@@ -32,12 +32,12 @@ type Cluster struct {
 	keyPrefix string                // key前缀
 	location  *time.Location        // 根据时区计算的时间
 
-	lockKey      string // 全局计算的key
-	zsetKey      string // 有序集合的key
-	listKey      string // 可执行的任务列表的key
-	setKey       string // 重入集合的key
-	heartbeatKey string // 心跳的Key
-	leaderKey    string // 上报当前的Leader
+	lockKey        string // 全局计算的key
+	zsetKey        string // 有序集合的key
+	listKey        string // 可执行的任务列表的key
+	setKey         string // 重入集合的key
+	heartbeatKey   string // 心跳的Key
+	leaderKey      string // 上报当前的Leader
 	executeInfoKey string // 执行情况的key
 
 	priority    *priority.Priority // 全局优先级
@@ -615,9 +615,9 @@ func (l *Cluster) processTask(taskId string) {
 	l.logger.Infof(ctx, "doTask timer begin taskId:%s", taskId)
 
 	// 上报执行情况
-	executeVal := fmt.Sprintf("%s|%s|%s",taskId,l.instanceId,begin.Format(time.RFC3339Nano))
-	l.redis.ZAdd(ctx,l.executeInfoKey,&redis.Z{
-		Score: float64(begin.UnixMilli()),
+	executeVal := fmt.Sprintf("%s|%s|%s|%s", taskId, l.instanceId, u.String(), begin.Format(time.RFC3339Nano))
+	l.redis.ZAdd(ctx, l.executeInfoKey, &redis.Z{
+		Score:  float64(begin.UnixMilli()),
 		Member: executeVal,
 	})
 
@@ -644,7 +644,6 @@ func (l *Cluster) processTask(taskId string) {
 	}
 	defer lock.Unlock()
 
-
 	defer func() {
 		if err := recover(); err != nil {
 			l.logger.Errorf(ctx, "doTask timer:回调任务panic err:%+v stack:%s", err, string(debug.Stack()))
@@ -652,8 +651,6 @@ func (l *Cluster) processTask(taskId string) {
 
 		l.logger.Infof(ctx, "doTask timer:执行任务耗时:%s %dms", taskId, time.Since(begin).Milliseconds())
 	}()
-
-
 
 	// 执行任务
 	if err := t.Callback(ctx, t.ExtendData); err != nil {
