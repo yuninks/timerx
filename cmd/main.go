@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/yuninks/loggerx"
 	"github.com/yuninks/timerx"
 	"github.com/yuninks/timerx/priority"
 )
@@ -128,9 +127,10 @@ func cluster() {
 	client := getRedis()
 	ctx := context.Background()
 
-	log := loggerx.NewLogger(ctx,loggerx.SetToConsole(),loggerx.SetEscapeHTML(false))
+	// log := loggerx.NewLogger(ctx,loggerx.SetToConsole(),loggerx.SetEscapeHTML(false))
+	// _ = log
 
-	cluster := timerx.InitCluster(ctx, client, "test", timerx.SetPriority(103), timerx.SetLogger(log))
+	cluster := timerx.InitCluster(ctx, client, "test", timerx.SetPriority(103))
 	err := cluster.EverySpace(ctx, "test_space1", 1*time.Second, aa, "这是秒任务1")
 	fmt.Println(err)
 	err = cluster.EverySpace(ctx, "test_space2", 2*time.Second, aa, "这是秒任务2")
