@@ -26,8 +26,8 @@ func main() {
 
 	// re()
 	// d()
-	cluster()
-	// once()
+	// cluster()
+	once()
 	// prioritys()
 
 	select {}
@@ -38,7 +38,7 @@ func prioritys() {
 
 	client := getRedis()
 	ctx := context.Background()
-	pro := priority.InitPriority(ctx, client, "test", 10)
+	pro, _ := priority.InitPriority(ctx, client, "test", 10)
 
 	for {
 		b := pro.IsLatest(ctx)
@@ -59,10 +59,13 @@ func once() {
 	}
 
 	ops := []timerx.Option{
-		timerx.SetPriority(ver),
+		timerx.WithPriority(ver),
 	}
 
-	one := timerx.InitOnce(ctx, client, "test", w, ops...)
+	one, err := timerx.InitOnce(ctx, client, "test_once", w, ops...)
+	if err != nil {
+		panic(err)
+	}
 
 	d := OnceData{
 		Num: 3,
@@ -76,17 +79,17 @@ func once() {
 	// d = OnceData{
 	// 	Num: 4,
 	// }
-	dd := 123
+	// dd := 123
 	// dy, _ = json.Marshal(d)
-	err = one.Save("test", "test4", 2*time.Second, dd)
-	if err != nil {
-		fmt.Println(err)
-	}
+	// err = one.Save("test", "test4", 2*time.Second, dd)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// }
 
-	err = one.Save("test", "test5", 5*time.Second, dd)
-	if err != nil {
-		fmt.Println(err)
-	}
+	// err = one.Save("test", "test5", 5*time.Second, dd)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// }
 
 }
 
@@ -97,6 +100,15 @@ type OnceData struct {
 type OnceWorker struct{}
 
 func (l OnceWorker) Worker(ctx context.Context, taskType timerx.OnceTaskType, taskId string, attachData interface{}) *timerx.OnceWorkerResp {
+	// 追加写入文件
+	file, err := os.OpenFile("./test.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	file.WriteString(fmt.Sprintf("执行时间:%s\n", time.Now().Format("2006-01-02 15:04:05")))
+
 	fmt.Println("执行时间:", time.Now().Format("2006-01-02 15:04:05"))
 	fmt.Println(taskType, taskId)
 
@@ -119,7 +131,7 @@ func (l OnceWorker) Worker(ctx context.Context, taskType timerx.OnceTaskType, ta
 	return &timerx.OnceWorkerResp{
 		Retry:      true,
 		AttachData: attachData,
-		DelayTime:  10 * time.Second,
+		DelayTime:  time.Second,
 	}
 }
 
@@ -130,7 +142,7 @@ func cluster() {
 	// log := loggerx.NewLogger(ctx,loggerx.SetToConsole(),loggerx.SetEscapeHTML(false))
 	// _ = log
 
-	cluster := timerx.InitCluster(ctx, client, "test", timerx.SetPriority(103))
+	cluster, _ := timerx.InitCluster(ctx, client, "test", timerx.WithPriority(103))
 	err := cluster.EverySpace(ctx, "test_space1", 1*time.Second, aa, "这是秒任务1")
 	fmt.Println(err)
 	err = cluster.EverySpace(ctx, "test_space2", 2*time.Second, aa, "这是秒任务2")
@@ -195,7 +207,7 @@ func re() {
 	client := getRedis()
 
 	ctx := context.Background()
-	cl := timerx.InitCluster(ctx, client, "kkkk")
+	cl, _ := timerx.InitCluster(ctx, client, "kkkk")
 	cl.EverySpace(ctx, "test1", 1*time.Millisecond, aa, "data")
 	cl.EverySpace(ctx, "test2", 1*time.Millisecond, aa, "data")
 	cl.EverySpace(ctx, "test3", 1*time.Millisecond, aa, "data")

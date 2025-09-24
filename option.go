@@ -24,7 +24,7 @@ func defaultOptions() Options {
 		usePriority:   false,
 		priorityVal:   0,
 		batchSize:     100,
-		maxRetryCount: 100,
+		maxRetryCount: 0,
 	}
 }
 
@@ -78,8 +78,8 @@ func WithBatchSize(size int) Option {
 
 func WithMaxRetryCount(count int) Option {
 	return func(o *Options) {
-		if count <= 0 {
-			count = 1
+		if count < 0 {
+			count = 0
 		}
 		o.maxRetryCount = count
 	}
