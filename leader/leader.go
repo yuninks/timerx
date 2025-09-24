@@ -14,6 +14,10 @@ import (
 	"github.com/yuninks/timerx/priority"
 )
 
+// 领导
+// 作用：领导选举，是领导才执行，避免资源浪费
+// 依赖：priority
+
 type Leader struct {
 	ctx    context.Context
 	cancel context.CancelFunc

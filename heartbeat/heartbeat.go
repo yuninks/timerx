@@ -15,6 +15,7 @@ import (
 
 // 心跳
 // 作用：上报实例存活状态
+// 依赖：leader priority
 
 type HeartBeat struct {
 	ctx    context.Context
