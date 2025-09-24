@@ -34,7 +34,7 @@ type Priority struct {
 
 func InitPriority(ctx context.Context, re redis.UniversalClient, keyPrefix string, priority int64, opts ...Option) (*Priority, error) {
 
-	if re != nil {
+	if re == nil {
 		return nil, errors.New("redis is nil")
 	}
 
