@@ -39,7 +39,7 @@ func TestPriority(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(ctx)
 
-		pro := InitPriority(ctx, re, "test", 10, SetUpdateInterval(time.Second*1))
+		pro, _ := InitPriority(ctx, re, "test", 10, WithUpdateInterval(time.Second*1))
 
 		for i := 0; i < 10; i++ {
 			bb := pro.IsLatest(ctx)
@@ -50,7 +50,7 @@ func TestPriority(t *testing.T) {
 		cancel()
 	}()
 
-	pro := InitPriority(ctx, re, "test", 0, SetUpdateInterval(time.Second*1))
+	pro, _ := InitPriority(ctx, re, "test", 0, WithUpdateInterval(time.Second*1))
 
 	for i := 0; i < 25; i++ {
 		bb := pro.IsLatest(ctx)
@@ -85,7 +85,7 @@ func TestInitPriority(t *testing.T) {
 	ctx := context.Background()
 
 	// 测试正常初始化
-	priority := InitPriority(ctx, getRedis(), "test", 100)
+	priority, _ := InitPriority(ctx, getRedis(), "test", 100)
 	assert.NotNil(t, priority)
 	assert.Equal(t, int64(100), priority.priority)
 }
@@ -137,7 +137,7 @@ func TestSetPriorityScenarios(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 
-			priority := InitPriority(ctx, redisConn, "test22", tc.newPriority)
+			priority, _ := InitPriority(ctx, redisConn, "test22", tc.newPriority)
 			defer priority.Close()
 
 			time.Sleep(time.Second * 1)
@@ -154,7 +154,7 @@ func TestSetPriorityScenarios(t *testing.T) {
 func TestConcurrentAccess(t *testing.T) {
 	ctx := context.Background()
 
-	priority := InitPriority(ctx, getRedis(), "testacc", 100)
+	priority, _ := InitPriority(ctx, getRedis(), "testacc", 100)
 
 	time.Sleep(time.Second * 1)
 
@@ -186,12 +186,12 @@ func TestErrorScenarios(t *testing.T) {
 	t.Run("Redis连接失败", func(t *testing.T) {
 		ctx := context.Background()
 
-		priority := InitPriority(ctx, getRedis(), "test", 100)
-		_,err := priority.setPriority()
-		
+		priority, _ := InitPriority(ctx, getRedis(), "test", 100)
+		_, err := priority.setPriority()
+
 		assert.Error(t, err)
 	})
-	
+
 	t.Run("Redis返回值解析错误", func(t *testing.T) {
 		ctx := context.Background()
 
@@ -201,7 +201,7 @@ func TestErrorScenarios(t *testing.T) {
 			priority: 100,
 			ctx:      ctx,
 		}
-		
+
 		_, err := priority.getCurrentPriority()
 		assert.Error(t, err)
 	})

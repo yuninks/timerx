@@ -13,13 +13,13 @@ import (
 func TestCluster_AddEveryMonth(t *testing.T) {
 	ctx := context.Background()
 	redis := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr:     "localhost:6379",
 		Password: "123456",
-		DB: 0,
+		DB:       0,
 	})
 	defer redis.Close()
 
-	cluster := timerx.InitCluster(ctx, redis, "test")
+	cluster, _ := timerx.InitCluster(ctx, redis, "test")
 
 	taskId := "testTask"
 	hour := 2
@@ -49,7 +49,7 @@ func TestCluster_AddEveryWeek(t *testing.T) {
 	})
 	defer redis.Close()
 
-	cluster := timerx.InitCluster(ctx, redis, "test")
+	cluster,_ := timerx.InitCluster(ctx, redis, "test")
 
 	taskId := "testTask"
 	week := time.Sunday
@@ -78,7 +78,7 @@ func TestCluster_AddEveryDay(t *testing.T) {
 	})
 	defer redis.Close()
 
-	cluster := timerx.InitCluster(ctx, redis, "test")
+	cluster,_ := timerx.InitCluster(ctx, redis, "test")
 
 	taskId := "testTask"
 	hour := 2
@@ -106,12 +106,12 @@ func TestCluster_AddEveryHour(t *testing.T) {
 	})
 	defer redis.Close()
 
-	cluster := timerx.InitCluster(ctx, redis, "test")
+	cluster,_ := timerx.InitCluster(ctx, redis, "test")
 
 	taskId := "testTask"
 	minute := 3
 	second := 4
-	callback := func(ctx context.Context, data interface{}) error{
+	callback := func(ctx context.Context, data interface{}) error {
 		// do something
 		fmt.Println("Task executed:", data)
 		return nil
@@ -133,11 +133,11 @@ func TestCluster_AddEveryMinute(t *testing.T) {
 	})
 	defer redis.Close()
 
-	cluster := timerx.InitCluster(ctx, redis, "test")
+	cluster,_ := timerx.InitCluster(ctx, redis, "test")
 
 	taskId := "testTask"
 	second := 4
-	callback := func(ctx context.Context, data interface{}) error{
+	callback := func(ctx context.Context, data interface{}) error {
 		// do something
 		fmt.Println("Task executed:", data)
 		return nil
@@ -157,15 +157,15 @@ func TestCluster_Add(t *testing.T) {
 	ctx := context.Background()
 	fmt.Println("66666")
 	redis := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr:     "localhost:6379",
 		Password: "123456",
-		DB: 0,
+		DB:       0,
 	})
 	defer redis.Close()
 
 	t.Log("6666")
 
-	cluster := timerx.InitCluster(ctx, redis, "test")
+	cluster,_ := timerx.InitCluster(ctx, redis, "test")
 
 	taskId := "testTask"
 	dur := time.Second
@@ -181,9 +181,7 @@ func TestCluster_Add(t *testing.T) {
 		t.Errorf("Add failed,1 err: %v", err)
 	}
 
-
 	time.Sleep(time.Second * 20)
-
 
 	// TODO: verify the job is added to the cluster and can be executed after the specified duration
 }

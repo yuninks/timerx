@@ -32,14 +32,14 @@ func newOptions(opts ...Option) Options {
 	return o
 }
 
-func SetLogger(log logger.Logger) Option {
+func WithLogger(log logger.Logger) Option {
 	return func(o *Options) {
 		o.logger = log
 	}
 }
 
 // 更新周期
-func SetUpdateInterval(d time.Duration) Option {
+func WithUpdateInterval(d time.Duration) Option {
 	if d.Abs() < time.Second {
 		d = time.Second * 5
 	}

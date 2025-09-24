@@ -2,6 +2,7 @@ package priority
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -31,7 +32,12 @@ type Priority struct {
 	latestMux sync.RWMutex
 }
 
-func InitPriority(ctx context.Context, re redis.UniversalClient, keyPrefix string, priority int64, opts ...Option) *Priority {
+func InitPriority(ctx context.Context, re redis.UniversalClient, keyPrefix string, priority int64, opts ...Option) (*Priority, error) {
+
+	if re != nil {
+		return nil, errors.New("redis is nil")
+	}
+
 	conf := newOptions(opts...)
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -50,7 +56,7 @@ func InitPriority(ctx context.Context, re redis.UniversalClient, keyPrefix strin
 
 	pro.startDaemon()
 
-	return pro
+	return pro, nil
 }
 
 func (p *Priority) Close() {
@@ -117,8 +123,6 @@ func (l *Priority) getLatestLoop() {
 	}
 
 }
-
-
 
 func (p *Priority) IsLatest(ctx context.Context) bool {
 	p.latestMux.RLock()

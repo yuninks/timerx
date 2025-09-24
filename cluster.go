@@ -55,9 +55,12 @@ type Cluster struct {
 
 // 初始化定时器
 // 全局只需要初始化一次
-func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix string, opts ...Option) *Cluster {
+func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix string, opts ...Option) (*Cluster, error) {
 
-	// clusterOnceLimit.Do(func() {
+	if red == nil {
+		return nil, errors.New("redis is nil")
+	}
+
 	op := newOptions(opts...)
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -90,7 +93,13 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 	// 初始化优先级
 
 	if clu.usePriority {
-		clu.priority = priority.InitPriority(ctx, red, clu.priorityKey, op.priorityVal, priority.SetLogger(clu.logger))
+
+		pri, err := priority.InitPriority(ctx, red, clu.priorityKey, op.priorityVal, priority.WithLogger(clu.logger))
+		if err != nil {
+			clu.logger.Errorf(ctx, "InitPriority err:%v", err)
+			return nil, err
+		}
+		clu.priority = pri
 	}
 
 	// 启动守护进程
@@ -98,7 +107,7 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 
 	clu.logger.Infof(ctx, "InitCluster success keyPrefix:%s instanceId:%s", clu.keyPrefix, clu.instanceId)
 
-	return clu
+	return clu, nil
 }
 
 // Stop 停止集群定时器
@@ -270,6 +279,10 @@ func (l *Cluster) getLeaderLock() error {
 	l.logger.Infof(l.ctx, "getLeaderLock Instance %s became leader", lock.GetValue())
 
 	go func() {
+		if !l.usePriority || l.priority == nil {
+			return
+		}
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -279,6 +292,7 @@ func (l *Cluster) getLeaderLock() error {
 			default:
 				if !l.priority.IsLatest(l.ctx) {
 					cancel()
+					return
 				}
 				time.Sleep(100 * time.Millisecond)
 			}

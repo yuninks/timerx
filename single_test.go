@@ -52,8 +52,8 @@ func TestSingleTimer_Basic(t *testing.T) {
 	mockLogger := &MockLogger{}
 
 	timer := timerx.InitSingle(ctx,
-		timerx.SetLogger(mockLogger),
-		timerx.SetTimeZone(time.UTC))
+		timerx.WithLogger(mockLogger),
+		timerx.WithLocation(time.UTC))
 	defer timer.Stop()
 
 	// 测试任务计数
@@ -108,7 +108,7 @@ func TestSingleTimer_Deduplication(t *testing.T) {
 	ctx := context.Background()
 	mockLogger := &MockLogger{}
 
-	timer := timerx.InitSingle(ctx, timerx.SetLogger(mockLogger))
+	timer := timerx.InitSingle(ctx, timerx.WithLogger(mockLogger))
 	defer timer.Stop()
 
 	var executionCount int32
@@ -190,7 +190,7 @@ func TestSingleTimer_Timeout(t *testing.T) {
 	ctx := context.Background()
 	mockLogger := &MockLogger{}
 
-	timer := timerx.InitSingle(ctx, timerx.SetLogger(mockLogger))
+	timer := timerx.InitSingle(ctx, timerx.WithLogger(mockLogger))
 	defer timer.Stop()
 
 	// 长时间运行的任务
@@ -217,7 +217,7 @@ func TestSingleTimer_PanicRecovery(t *testing.T) {
 	ctx := context.Background()
 	mockLogger := &MockLogger{}
 
-	timer := timerx.InitSingle(ctx, timerx.SetLogger(mockLogger))
+	timer := timerx.InitSingle(ctx, timerx.WithLogger(mockLogger))
 	defer timer.Stop()
 
 	panicTask := func(ctx context.Context, data interface{}) error {
@@ -236,7 +236,7 @@ func TestSingleTimer_PanicRecovery(t *testing.T) {
 // 测试不同时间类型的任务
 func TestSingleTimer_DifferentJobTypes(t *testing.T) {
 	ctx := context.Background()
-	timer := timerx.InitSingle(ctx, timerx.SetTimeZone(time.UTC))
+	timer := timerx.InitSingle(ctx, timerx.WithLocation(time.UTC))
 	defer timer.Stop()
 
 	var counts struct {
@@ -287,7 +287,7 @@ func TestSingleTimer_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	mockLogger := &MockLogger{}
 
-	timer := timerx.InitSingle(ctx, timerx.SetLogger(mockLogger))
+	timer := timerx.InitSingle(ctx, timerx.WithLogger(mockLogger))
 
 	var executionCount int32
 	_, err := timer.AddSpace(ctx, "cancel-test", 100*time.Millisecond,
@@ -419,7 +419,7 @@ func TestSingleTimer_Logging(t *testing.T) {
 	ctx := context.Background()
 	mockLogger := &MockLogger{}
 
-	timer := timerx.InitSingle(ctx, timerx.SetLogger(mockLogger))
+	timer := timerx.InitSingle(ctx, timerx.WithLogger(mockLogger))
 	defer timer.Stop()
 
 	// 添加会panic的任务
@@ -448,7 +448,7 @@ func TestSingleTimer_Timezone(t *testing.T) {
 	for _, loc := range locations {
 		t.Run(loc.String(), func(t *testing.T) {
 			ctx := context.Background()
-			timer := timerx.InitSingle(ctx, timerx.SetTimeZone(loc))
+			timer := timerx.InitSingle(ctx, timerx.WithLocation(loc))
 			defer timer.Stop()
 
 			var executed bool
