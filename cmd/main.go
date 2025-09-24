@@ -110,12 +110,12 @@ func (l OnceWorker) Worker(ctx context.Context, taskType timerx.OnceTaskType, ta
 	file.WriteString(fmt.Sprintf("执行时间:%s\n", time.Now().Format("2006-01-02 15:04:05")))
 
 	fmt.Println("执行时间:", time.Now().Format("2006-01-02 15:04:05"))
-	fmt.Println(taskType, taskId)
+	// fmt.Println(taskType, taskId)
 
-	fmt.Printf("原来的参数：%+v %T\n", attachData, attachData)
+	// fmt.Printf("原来的参数：%+v %T\n", attachData, attachData)
 
-	v, ok := attachData.(int64)
-	fmt.Println("vvvvvvv", v, ok)
+	// v, ok := attachData.(int64)
+	// fmt.Println("vvvvvvv", v, ok)
 	// fmt.Printf()
 
 	// d := OnceData{}
