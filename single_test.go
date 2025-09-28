@@ -66,7 +66,7 @@ func TestSingleTimer_Basic(t *testing.T) {
 	}
 
 	// 添加间隔任务
-	index, err := timer.AddSpace(ctx, "test-task", 100*time.Millisecond, taskFunc, nil)
+	index, err := timer.EverySpace(ctx, "test-task", 100*time.Millisecond, taskFunc, nil)
 	assert.NoError(t, err)
 	assert.Greater(t, index, int64(0))
 	assert.Equal(t, 1, timer.TaskCount())
@@ -89,17 +89,17 @@ func TestSingleTimer_InvalidParams(t *testing.T) {
 	validFunc := func(ctx context.Context, data interface{}) error { return nil }
 
 	// 测试空taskId
-	_, err := timer.AddSpace(ctx, "", time.Second, validFunc, nil)
+	_, err := timer.EverySpace(ctx, "", time.Second, validFunc, nil)
 	assert.Error(t, err)
 
 	// 测试nil回调函数
-	_, err = timer.AddSpace(ctx, "test", time.Second, nil, nil)
+	_, err = timer.EverySpace(ctx, "test", time.Second, nil, nil)
 	assert.Error(t, err)
 
 	// 测试无效间隔时间
-	_, err = timer.AddSpace(ctx, "test", -time.Second, validFunc, nil)
+	_, err = timer.EverySpace(ctx, "test", -time.Second, validFunc, nil)
 	assert.Error(t, err)
-	_, err = timer.AddSpace(ctx, "test", 0, validFunc, nil)
+	_, err = timer.EverySpace(ctx, "test", 0, validFunc, nil)
 	assert.Error(t, err)
 }
 
@@ -119,7 +119,7 @@ func TestSingleTimer_Deduplication(t *testing.T) {
 	}
 
 	// 添加短间隔任务
-	_, err := timer.AddSpace(ctx, "dedup-test", 50*time.Millisecond, taskFunc, nil)
+	_, err := timer.EverySpace(ctx, "dedup-test", 50*time.Millisecond, taskFunc, nil)
 	assert.NoError(t, err)
 
 	// 等待一段时间，检查去重是否生效
@@ -157,7 +157,7 @@ func TestSingleTimer_Concurrency(t *testing.T) {
 				return nil
 			}
 
-			_, err := timer.AddSpace(ctx, fmt.Sprintf("concurrent-%d", i),
+			_, err := timer.EverySpace(ctx, fmt.Sprintf("concurrent-%d", i),
 				time.Duration(i+1)*100*time.Millisecond, taskFunc, nil)
 			assert.NoError(t, err)
 		}(i)
@@ -203,7 +203,7 @@ func TestSingleTimer_Timeout(t *testing.T) {
 		return nil
 	}
 
-	_, err := timer.AddSpace(ctx, "timeout-test", 100*time.Millisecond, longTask, nil)
+	_, err := timer.EverySpace(ctx, "timeout-test", 100*time.Millisecond, longTask, nil)
 	assert.NoError(t, err)
 
 	time.Sleep(500 * time.Millisecond)
@@ -224,7 +224,7 @@ func TestSingleTimer_PanicRecovery(t *testing.T) {
 		panic("test panic")
 	}
 
-	_, err := timer.AddSpace(ctx, "panic-test", 100*time.Millisecond, panicTask, nil)
+	_, err := timer.EverySpace(ctx, "panic-test", 100*time.Millisecond, panicTask, nil)
 	assert.NoError(t, err)
 
 	time.Sleep(200 * time.Millisecond)
@@ -251,7 +251,7 @@ func TestSingleTimer_DifferentJobTypes(t *testing.T) {
 	now := time.Now().UTC()
 
 	// 月任务（下个月同一天）
-	_, err := timer.AddMonth(ctx, "month-job", now.Day(), now.Hour(), now.Minute(), now.Second()+1,
+	_, err := timer.EveryMonth(ctx, "month-job", now.Day(), now.Hour(), now.Minute(), now.Second()+1,
 		func(ctx context.Context, data interface{}) error {
 			atomic.AddInt32(&counts.month, 1)
 			return nil
@@ -259,7 +259,7 @@ func TestSingleTimer_DifferentJobTypes(t *testing.T) {
 	assert.NoError(t, err)
 
 	// 周任务（下周同一天）
-	_, err = timer.AddWeek(ctx, "week-job", now.Weekday(), now.Hour(), now.Minute(), now.Second()+1,
+	_, err = timer.EveryWeek(ctx, "week-job", now.Weekday(), now.Hour(), now.Minute(), now.Second()+1,
 		func(ctx context.Context, data interface{}) error {
 			atomic.AddInt32(&counts.week, 1)
 			return nil
@@ -267,7 +267,7 @@ func TestSingleTimer_DifferentJobTypes(t *testing.T) {
 	assert.NoError(t, err)
 
 	// 间隔任务（立即执行）
-	_, err = timer.AddSpace(ctx, "space-job", 100*time.Millisecond,
+	_, err = timer.EverySpace(ctx, "space-job", 100*time.Millisecond,
 		func(ctx context.Context, data interface{}) error {
 			atomic.AddInt32(&counts.space, 1)
 			return nil
@@ -290,7 +290,7 @@ func TestSingleTimer_ContextCancellation(t *testing.T) {
 	timer := timerx.InitSingle(ctx, timerx.WithLogger(mockLogger))
 
 	var executionCount int32
-	_, err := timer.AddSpace(ctx, "cancel-test", 100*time.Millisecond,
+	_, err := timer.EverySpace(ctx, "cancel-test", 100*time.Millisecond,
 		func(ctx context.Context, data interface{}) error {
 			atomic.AddInt32(&executionCount, 1)
 			return nil
@@ -327,7 +327,7 @@ func TestSingleTimer_ExtendData(t *testing.T) {
 	testData := &TestData{Message: "hello", Count: 42}
 	var receivedData *TestData
 
-	_, err := timer.AddSpace(ctx, "data-test", 100*time.Millisecond,
+	_, err := timer.EverySpace(ctx, "data-test", 100*time.Millisecond,
 		func(ctx context.Context, data interface{}) error {
 			if data != nil {
 				receivedData = data.(*TestData)
@@ -352,14 +352,14 @@ func TestSingleTimer_TaskDeletion(t *testing.T) {
 	var executionCount int32
 
 	// 添加多个任务
-	index1, err := timer.AddSpace(ctx, "task-1", 100*time.Millisecond,
+	index1, err := timer.EverySpace(ctx, "task-1", 100*time.Millisecond,
 		func(ctx context.Context, data interface{}) error {
 			atomic.AddInt32(&executionCount, 1)
 			return nil
 		}, nil)
 	assert.NoError(t, err)
 
-	index2, err := timer.AddSpace(ctx, "task-2", 100*time.Millisecond,
+	index2, err := timer.EverySpace(ctx, "task-2", 100*time.Millisecond,
 		func(ctx context.Context, data interface{}) error {
 			atomic.AddInt32(&executionCount, 1)
 			return nil
@@ -407,7 +407,7 @@ func BenchmarkSingleTimer_AddAndExecute(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		timer.AddSpace(ctx, fmt.Sprintf("bench-%d", i), time.Millisecond,
+		timer.EverySpace(ctx, fmt.Sprintf("bench-%d", i), time.Millisecond,
 			func(ctx context.Context, data interface{}) error {
 				return nil
 			}, nil)
@@ -423,7 +423,7 @@ func TestSingleTimer_Logging(t *testing.T) {
 	defer timer.Stop()
 
 	// 添加会panic的任务
-	_, err := timer.AddSpace(ctx, "logging-test", 100*time.Millisecond,
+	_, err := timer.EverySpace(ctx, "logging-test", 100*time.Millisecond,
 		func(ctx context.Context, data interface{}) error {
 			panic("test panic for logging")
 		}, nil)
@@ -455,7 +455,7 @@ func TestSingleTimer_Timezone(t *testing.T) {
 			// now := time.Now().In(loc)
 
 			// 添加下一秒执行的任务
-			_, err := timer.AddSpace(ctx, "tz-test", time.Second,
+			_, err := timer.EverySpace(ctx, "tz-test", time.Second,
 				func(ctx context.Context, data interface{}) error {
 					executed = true
 					return nil
