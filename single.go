@@ -19,9 +19,6 @@ import (
 // 1. 这个定时器的作用范围是本机
 // 2. 适用简单的时间间隔定时任务
 
-// 避免执行重复
-var singleHasRun sync.Map
-
 type Single struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -54,13 +51,19 @@ func InitSingle(ctx context.Context, opts ...Option) *Single {
 		timeout:  op.timeout,
 	}
 
-	sin.wg.Add(1)
-	go sin.timerLoop(ctx)
-
-	sin.wg.Add(1)
-	go sin.cleanupLoop(ctx)
+	sin.startDaemon()
 
 	return sin
+}
+
+func (l *Single) startDaemon() {
+
+	l.wg.Add(1)
+	go l.timerLoop()
+
+	l.wg.Add(1)
+	go l.cleanupLoop()
+
 }
 
 // 停止所有定时任务
@@ -96,7 +99,7 @@ func (l *Single) MaxIndex() int64 {
 }
 
 // 定时器主循环
-func (s *Single) timerLoop(ctx context.Context) {
+func (s *Single) timerLoop() {
 	defer s.wg.Done()
 
 	ticker := time.NewTicker(100 * time.Millisecond) // 提高精度到100ms
@@ -113,20 +116,20 @@ func (s *Single) timerLoop(ctx context.Context) {
 				continue
 			}
 
-			s.iterator(ctx)
+			s.iterator(s.ctx)
 
-		case <-ctx.Done():
-			s.logger.Infof(ctx, "timer: context cancelled, stopping timer loop")
+		case <-s.ctx.Done():
+			s.logger.Infof(s.ctx, "timer: context cancelled, stopping timer loop")
 			return
 		case <-s.stopChan:
-			s.logger.Infof(ctx, "timer: received stop signal, stopping timer loop")
+			s.logger.Infof(s.ctx, "timer: received stop signal, stopping timer loop")
 			return
 		}
 	}
 }
 
 // 清理循环
-func (s *Single) cleanupLoop(ctx context.Context) {
+func (s *Single) cleanupLoop() {
 	defer s.wg.Done()
 
 	ticker := time.NewTicker(time.Minute)
@@ -138,7 +141,7 @@ func (s *Single) cleanupLoop(ctx context.Context) {
 			now := time.Now()
 			cleanupTime := now.Add(-2 * time.Minute) // 清理2分钟前的记录
 
-			s.hasRun.Range(func(k, v interface{}) bool {
+			s.hasRun.Range(func(k, v any) bool {
 				t, ok := v.(time.Time)
 				if !ok || t.Before(cleanupTime) {
 					s.hasRun.Delete(k)
@@ -146,11 +149,11 @@ func (s *Single) cleanupLoop(ctx context.Context) {
 				return true
 			})
 
-		case <-ctx.Done():
-			s.logger.Infof(ctx, "timer: context cancelled, stopping cleanup loop")
+		case <-s.ctx.Done():
+			s.logger.Infof(s.ctx, "timer: context cancelled, stopping cleanup loop")
 			return
 		case <-s.stopChan:
-			s.logger.Infof(ctx, "timer: received stop signal, stopping cleanup loop")
+			s.logger.Infof(s.ctx, "timer: received stop signal, stopping cleanup loop")
 			return
 		}
 	}
@@ -166,7 +169,7 @@ func (s *Single) cleanupLoop(ctx context.Context) {
 // @param callback 回调函数
 // @param extendData 扩展数据
 // @return error
-func (c *Single) AddMonth(ctx context.Context, taskId string, day int, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
+func (c *Single) EveryMonth(ctx context.Context, taskId string, day int, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
 
 	nowTime := time.Now().In(c.location)
 
@@ -190,7 +193,7 @@ func (c *Single) AddMonth(ctx context.Context, taskId string, day int, hour int,
 // @param hour int 小时
 // @param minute int 分钟
 // @param second int 秒
-func (c *Single) AddWeek(ctx context.Context, taskId string, week time.Weekday, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
+func (c *Single) EveryWeek(ctx context.Context, taskId string, week time.Weekday, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
 	nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
@@ -207,7 +210,7 @@ func (c *Single) AddWeek(ctx context.Context, taskId string, week time.Weekday, 
 }
 
 // 每天执行一次
-func (c *Single) AddDay(ctx context.Context, taskId string, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
+func (c *Single) EveryDay(ctx context.Context, taskId string, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
 	nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
@@ -223,7 +226,7 @@ func (c *Single) AddDay(ctx context.Context, taskId string, hour int, minute int
 }
 
 // 每小时执行一次
-func (c *Single) AddHour(ctx context.Context, taskId string, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
+func (c *Single) EveryHour(ctx context.Context, taskId string, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
 	nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
@@ -238,7 +241,7 @@ func (c *Single) AddHour(ctx context.Context, taskId string, minute int, second 
 }
 
 // 每分钟执行一次
-func (c *Single) AddMinute(ctx context.Context, taskId string, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
+func (c *Single) EveryMinute(ctx context.Context, taskId string, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
 	nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
@@ -252,7 +255,7 @@ func (c *Single) AddMinute(ctx context.Context, taskId string, second int, callb
 }
 
 // 特定时间间隔
-func (c *Single) AddSpace(ctx context.Context, taskId string, spaceTime time.Duration, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
+func (c *Single) EverySpace(ctx context.Context, taskId string, spaceTime time.Duration, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
 	nowTime := time.Now().In(c.location)
 
 	if spaceTime < 0 {
@@ -397,7 +400,7 @@ func (l *Single) iterator(ctx context.Context) {
 func (s *Single) executeTask(ctx context.Context, timer timerStr, originTime time.Time) {
 	// 创建带追踪ID的上下文
 	traceCtx := context.WithValue(ctx, "trace_id", uuid.NewV4().String())
-	s.logger.Infof(traceCtx, "timer: 开始执行任务 %s", timer.TaskId)
+	s.logger.Infof(traceCtx, "timer Single begin taskId:%s originTime:%d", timer.TaskId, originTime.UnixMilli())
 	traceCtx, cancel := context.WithTimeout(traceCtx, s.timeout) // 设置执行超时
 	defer cancel()
 
@@ -409,13 +412,6 @@ func (s *Single) executeTask(ctx context.Context, timer timerStr, originTime tim
 			default:
 			}
 		}()
-
-		// 检查任务是否已执行
-		taskKey := fmt.Sprintf("%s:%d", timer.TaskId, originTime.UnixNano())
-		if _, loaded := s.hasRun.LoadOrStore(taskKey, time.Now()); loaded {
-			s.logger.Errorf(traceCtx, "timer: 任务已执行，跳过本次执行 %s", timer.TaskId)
-			return
-		}
 
 		// 执行回调
 		if err := s.doTask(traceCtx, timer, originTime); err != nil {
@@ -431,26 +427,26 @@ func (s *Single) executeTask(ctx context.Context, timer timerStr, originTime tim
 // 定时器操作类
 // 这里不应painc
 func (l *Single) doTask(ctx context.Context, timeStr timerStr, originTime time.Time) error {
+	// 检查任务是否已执行
+	taskKey := fmt.Sprintf("%s:%d", timeStr.TaskId, originTime.UnixMilli())
+	if _, loaded := l.hasRun.LoadOrStore(taskKey, time.Now()); loaded {
+		l.logger.Errorf(ctx, "timer: 任务已执行，跳过本次执行 %s", timeStr.TaskId)
+		return ErrTaskExecuted
+	}
+
 	defer func() {
 		if err := recover(); err != nil {
-			l.logger.Errorf(ctx, "timer:回调任务panic err:%+v stack:%s", err, string(debug.Stack()))
+			l.logger.Errorf(ctx, "timer Single call panic err:%+v stack:%s", err, string(debug.Stack()))
 		}
 	}()
 
-	nuiKey := timeStr.TaskId + originTime.String()
-
-	// timeStr.TaskId
-
-	_, loaded := singleHasRun.LoadOrStore(nuiKey, time.Now())
-	if loaded {
-		// 已经存在，说明已经执行过了
-		l.logger.Errorf(ctx, "timer: 任务已执行，跳过本次执行 %s", nuiKey)
-		return nil
+	err := timeStr.Callback(ctx, timeStr.ExtendData)
+	if err != nil {
+		l.logger.Errorf(ctx, "timer Single call back %s, err: %v", timeStr.TaskId, err)
+		return err
 	}
 
-	ctx = context.WithValue(ctx, "trace_id", uuid.NewV4().String())
-
-	return timeStr.Callback(ctx, timeStr.ExtendData)
+	return nil
 }
 
 // 更新下次执行时间

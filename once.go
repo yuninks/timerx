@@ -330,7 +330,7 @@ func (w *Once) save(taskType OnceTaskType, taskId string, delayTime time.Duratio
 	})
 	_, err := pipe.Exec(w.ctx)
 	if err != nil {
-		w.logger.Errorf(w.ctx, "save task failed:%w", err)
+		w.logger.Errorf(w.ctx, "save task failed:%v", err)
 		return err
 	}
 
@@ -374,7 +374,7 @@ func (w *Once) Delete(taskType OnceTaskType, taskId string) error {
 
 	_, err := pipe.Exec(w.ctx)
 	if err != nil {
-		w.logger.Errorf(w.ctx, "delete task failed:%w", err)
+		w.logger.Errorf(w.ctx, "delete task failed:%v", err)
 		return err
 	}
 
@@ -431,7 +431,7 @@ func (l *Once) processTask(key string) {
 
 	taskType, taskId, err := l.parseRedisKey(key)
 	if err != nil {
-		l.logger.Errorf(ctx, "processTask parseRedisKey:%w key:%s", err, key)
+		l.logger.Errorf(ctx, "processTask parseRedisKey:%v key:%s", err, key)
 		return
 	}
 
@@ -479,14 +479,14 @@ func (l *Once) processTask(key string) {
 		// 删除任务
 		l.logger.Infof(ctx, "processTask delete key:%s", key)
 		if err := l.Delete(taskType, taskId); err != nil {
-			l.logger.Errorf(ctx, "processTask delete errprocessTask delete err:%w", err)
+			l.logger.Errorf(ctx, "processTask delete errprocessTask delete err:%v", err)
 		}
 		return
 	}
 
 	// 重新放入队列
 	if err := l.handleRetry(ctx, taskType, taskId, &ed, resp); err != nil {
-		l.logger.Errorf(ctx, "processTask handleRetry err:%w", err)
+		l.logger.Errorf(ctx, "processTask handleRetry err:%v", err)
 	}
 }
 

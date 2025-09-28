@@ -3,6 +3,7 @@ package timerx
 import "errors"
 
 var (
+	// 定时器不存在
 	ErrTimerNotFound = errors.New("timer not found")
 	// 任务ID不能为空
 	ErrTaskIdEmpty = errors.New("taskId can not be empty")
@@ -24,4 +25,6 @@ var (
 	ErrIntervalTime = errors.New("interval time must be greater than 0")
 	// 任务Id已存在
 	ErrTaskIdExists = errors.New("taskId already exists")
+	// 任务已执行
+	ErrTaskExecuted = errors.New("task already executed")
 )
