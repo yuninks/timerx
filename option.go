@@ -9,7 +9,7 @@ import (
 type Options struct {
 	logger        logger.Logger
 	location      *time.Location
-	timeout       time.Duration
+	timeout       time.Duration // 任务最长执行时间
 	usePriority   bool
 	priorityVal   int64
 	batchSize     int
@@ -20,7 +20,7 @@ func defaultOptions() Options {
 	return Options{
 		logger:        logger.NewLogger(),
 		location:      time.Local,
-		timeout:       time.Hour,
+		timeout:       time.Hour, //
 		usePriority:   false,
 		priorityVal:   0,
 		batchSize:     100,
