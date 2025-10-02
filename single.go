@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	uuid "github.com/satori/go.uuid"
+	"github.com/google/uuid"
 	"github.com/yuninks/timerx/logger"
 )
 
@@ -68,20 +68,13 @@ func (l *Single) startDaemon() {
 
 // 停止所有定时任务
 func (s *Single) Stop() {
+	close(s.stopChan)
+
 	if s.cancel != nil {
 		s.cancel()
 	}
-	close(s.stopChan)
-	s.wg.Wait()
 
-	// 清理所有资源
-	s.workerList.Range(func(k, v interface{}) bool {
-		if timer, ok := v.(timerStr); ok {
-			close(timer.CanRunning)
-		}
-		s.workerList.Delete(k)
-		return true
-	})
+	s.wg.Wait()
 }
 
 // 获取任务数量
@@ -99,8 +92,8 @@ func (l *Single) MaxIndex() int64 {
 }
 
 // 定时器主循环
-func (s *Single) timerLoop() {
-	defer s.wg.Done()
+func (l *Single) timerLoop() {
+	defer l.wg.Done()
 
 	ticker := time.NewTicker(100 * time.Millisecond) // 提高精度到100ms
 	defer ticker.Stop()
@@ -108,21 +101,21 @@ func (s *Single) timerLoop() {
 	for {
 		select {
 		case t := <-ticker.C:
-			s.nextTimeMux.RLock()
-			nextTime := s.nextTime
-			s.nextTimeMux.RUnlock()
+			l.nextTimeMux.RLock()
+			nextTime := l.nextTime
+			l.nextTimeMux.RUnlock()
 
 			if t.Before(nextTime) {
 				continue
 			}
 
-			s.iterator(s.ctx)
+			l.iterator(l.ctx)
 
-		case <-s.ctx.Done():
-			s.logger.Infof(s.ctx, "timer: context cancelled, stopping timer loop")
+		case <-l.ctx.Done():
+			l.logger.Infof(l.ctx, "timer: context cancelled, stopping timer loop")
 			return
-		case <-s.stopChan:
-			s.logger.Infof(s.ctx, "timer: received stop signal, stopping timer loop")
+		case <-l.stopChan:
+			l.logger.Infof(l.ctx, "timer: received stop signal, stopping timer loop")
 			return
 		}
 	}
@@ -343,12 +336,19 @@ func (s *Single) updateNextTimeIfEarlier(candidate time.Time) {
 
 // 删除定时器
 func (l *Single) Del(index int64) {
-	if val, ok := l.workerList.Load(index); ok {
-		if timer, ok := val.(timerStr); ok {
-			close(timer.CanRunning)
-		}
+	if _, ok := l.workerList.Load(index); ok {
 		l.workerList.Delete(index)
 	}
+}
+
+func (l *Single) DelByTaskId(taskId string) {
+	l.workerList.Range(func(k, v interface{}) bool {
+		timeStr, ok := v.(timerStr)
+		if ok && timeStr.TaskId == taskId {
+			l.workerList.Delete(k)
+		}
+		return true
+	})
 }
 
 // 迭代定时器列表
@@ -399,7 +399,10 @@ func (l *Single) iterator(ctx context.Context) {
 // 执行任务
 func (s *Single) executeTask(ctx context.Context, timer timerStr, originTime time.Time) {
 	// 创建带追踪ID的上下文
-	traceCtx := context.WithValue(ctx, "trace_id", uuid.NewV4().String())
+
+	u, _ := uuid.NewV7()
+
+	traceCtx := context.WithValue(ctx, "trace_id", u.String())
 	s.logger.Infof(traceCtx, "timer Single begin taskId:%s originTime:%d", timer.TaskId, originTime.UnixMilli())
 	traceCtx, cancel := context.WithTimeout(traceCtx, s.timeout) // 设置执行超时
 	defer cancel()

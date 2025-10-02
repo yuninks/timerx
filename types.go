@@ -6,11 +6,11 @@ import (
 )
 
 type timerStr struct {
-	Callback   func(ctx context.Context, extendData interface{}) error // 需要回调的方法
-	CanRunning chan (struct{})                                         // 是否允许执行(only single)
-	TaskId     string                                                  // 任务ID 全局唯一键(only cluster)
-	ExtendData interface{}                                             // 附加参数
-	JobData    *JobData                                                // 任务时间数据
+	Callback   func(ctx context.Context, extendData any) error // 需要回调的方法
+	CanRunning chan (struct{})                                 // 是否允许执行(only single)
+	TaskId     string                                          // 任务ID 全局唯一键
+	ExtendData any                                             // 附加参数
+	JobData    *JobData                                        // 任务时间数据
 }
 
 type JobType string

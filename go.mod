@@ -5,7 +5,6 @@ go 1.24
 require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/google/uuid v1.6.0
-	github.com/satori/go.uuid v1.2.0
 	github.com/stretchr/testify v1.11.1
 	github.com/yuninks/cachex v1.0.5
 	github.com/yuninks/lockx v1.1.2
