@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/yuninks/cachex"
 	"github.com/yuninks/lockx"
 	"github.com/yuninks/timerx/heartbeat"
@@ -94,7 +94,7 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 		pri, err := priority.InitPriority(
 			ctx,
 			red,
-			clu.priorityKey,
+			clu.keyPrefix,
 			op.priorityVal,
 			priority.WithLogger(clu.logger),
 			priority.WithInstanceId(clu.instanceId),
@@ -111,7 +111,7 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 	le, err := leader.InitLeader(
 		ctx,
 		clu.redis,
-		keyPrefix,
+		clu.keyPrefix,
 		leader.WithLogger(clu.logger),
 		leader.WithPriority(clu.priority),
 		leader.WithInstanceId(clu.instanceId),
