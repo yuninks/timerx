@@ -8,10 +8,11 @@ import (
 )
 
 type Options struct {
-	logger     logger.Logger
-	instanceId string
+	logger     logger.Logger      // 日志
+	instanceId string             // 实例ID
 	priority   *priority.Priority // 全局优先级
-	leader     *leader.Leader
+	leader     *leader.Leader     // Leader
+	source     string             // 来源服务
 }
 
 func defaultOptions() Options {
@@ -55,5 +56,11 @@ func WithLeader(l *leader.Leader) Option {
 func WithInstanceId(instanceId string) Option {
 	return func(o *Options) {
 		o.instanceId = instanceId
+	}
+}
+
+func WithSource(source string) Option {
+	return func(o *Options) {
+		o.source = source
 	}
 }

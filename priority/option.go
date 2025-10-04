@@ -3,6 +3,7 @@ package priority
 import (
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/yuninks/timerx/logger"
 )
 
@@ -10,15 +11,21 @@ type Options struct {
 	getInterval    time.Duration // 查询周期
 	updateInterval time.Duration // 更新间隔
 	expireTime     time.Duration // 有效时间
-	logger         logger.Logger
+	logger         logger.Logger // 日志
+	source         string        // 来源服务
+	instanceId     string        // 实例ID
 }
 
 func defaultOptions() Options {
+
+	u, _ := uuid.NewV7()
+
 	return Options{
 		getInterval:    time.Second * 2,
 		updateInterval: time.Second * 4,
 		expireTime:     time.Second * 8,
 		logger:         logger.NewLogger(),
+		instanceId:     u.String(),
 	}
 }
 
@@ -47,5 +54,17 @@ func WithUpdateInterval(d time.Duration) Option {
 		o.updateInterval = d
 		o.expireTime = d*2 + time.Second
 		o.getInterval = d / 3
+	}
+}
+
+func WithInstanceId(instanceId string) Option {
+	return func(o *Options) {
+		o.instanceId = instanceId
+	}
+}
+
+func WithSource(s string) Option {
+	return func(o *Options) {
+		o.source = s
 	}
 }

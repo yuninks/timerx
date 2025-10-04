@@ -15,21 +15,23 @@ import (
 // 多版本场景判断当前是否最新版本
 
 type Priority struct {
-	ctx        context.Context
-	cancel     context.CancelFunc
-	priority   int64 // 优先级
-	redis      redis.UniversalClient
-	redisKey   string
-	logger     logger.Logger
-	expireTime time.Duration
+	ctx        context.Context       // 上下文
+	cancel     context.CancelFunc    // 取消函数
+	priority   int64                 // 优先级
+	redis      redis.UniversalClient // redis
+	redisKey   string                // redis key
+	logger     logger.Logger         // 日志
+	expireTime time.Duration         // 过期时间
 
 	setInterval time.Duration // 尝试set的间隔
 	getInterval time.Duration // 尝试get的间隔
 
 	wg sync.WaitGroup
 
-	isLatest  bool
-	latestMux sync.RWMutex
+	isLatest  bool         // 是否是最新版本
+	latestMux sync.RWMutex // 最新版本锁
+
+	instanceId string // 实例ID
 }
 
 func InitPriority(ctx context.Context, re redis.UniversalClient, keyPrefix string, priority int64, opts ...Option) (*Priority, error) {
@@ -48,10 +50,11 @@ func InitPriority(ctx context.Context, re redis.UniversalClient, keyPrefix strin
 		priority:    priority,
 		redis:       re,
 		logger:      conf.logger,
-		redisKey:    "timer:priority_" + keyPrefix,
+		redisKey:    "timer:priority_" + conf.source + keyPrefix,
 		expireTime:  conf.expireTime,
 		setInterval: conf.updateInterval,
 		getInterval: conf.getInterval,
+		instanceId:  conf.instanceId,
 	}
 
 	pro.startDaemon()

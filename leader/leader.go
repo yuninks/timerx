@@ -52,7 +52,7 @@ func InitLeader(ctx context.Context, ref redis.UniversalClient, keyPrefix string
 		ctx:              ctx,
 		cancel:           cancel,
 		redis:            ref,
-		leaderUniLockKey: "timer:leader_lockKey" + keyPrefix,
+		leaderUniLockKey: "timer:leader_lockKey" + op.source + keyPrefix,
 		priority:         op.priority,
 		instanceId:       op.instanceId,
 		logger:           op.logger,

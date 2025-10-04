@@ -13,6 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/yuninks/cachex"
 	"github.com/yuninks/lockx"
+	"github.com/yuninks/timerx/heartbeat"
+	"github.com/yuninks/timerx/leader"
 	"github.com/yuninks/timerx/logger"
 	"github.com/yuninks/timerx/priority"
 )
@@ -26,7 +28,6 @@ type Cluster struct {
 	ctx       context.Context       // context
 	cancel    context.CancelFunc    // 取消函数
 	redis     redis.UniversalClient // redis
-	cache     *cachex.Cache         // 本地缓存
 	timeout   time.Duration         // job执行超时时间
 	logger    logger.Logger         // 日志
 	keyPrefix string                // key前缀
@@ -36,21 +37,20 @@ type Cluster struct {
 	zsetKey        string // 有序集合的key
 	listKey        string // 可执行的任务列表的key
 	setKey         string // 重入集合的key
-	heartbeatKey   string // 心跳的Key
-	leaderKey      string // 上报当前的Leader
 	executeInfoKey string // 执行情况的key
+
+	wg         sync.WaitGroup // 等待组
+	workerList sync.Map       // 注册的任务列表
+	stopChan   chan struct{}  //
+	instanceId string         // 实例ID
 
 	priority    *priority.Priority // 全局优先级
 	priorityKey string             // 全局优先级的key
 	usePriority bool               // 是否使用优先级
 
-	wg               sync.WaitGroup // 等待组
-	isLeader         bool           // 是否是领导
-	leaderLock       sync.RWMutex   // 领导锁
-	leaderUniLockKey string         // 领导唯一锁
-	workerList       sync.Map       // 注册的任务列表
-	stopChan         chan struct{}  //
-	instanceId       string         // 实例ID
+	leader    *leader.Leader       // Leader
+	heartbeat *heartbeat.HeartBeat // 心跳
+	cache     *cachex.Cache        // 本地缓存
 }
 
 // 初始化定时器
@@ -68,39 +68,77 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 	U, _ := uuid.NewV7()
 
 	clu := &Cluster{
-		ctx:              ctx,
-		cancel:           cancel,
-		redis:            red,
-		cache:            cachex.NewCache(),
-		timeout:          op.timeout,
-		logger:           op.logger,
-		keyPrefix:        keyPrefix,
-		location:         op.location,
-		lockKey:          "timer:cluster_globalLockKey" + keyPrefix,    // 定时器的全局锁
-		zsetKey:          "timer:cluster_zsetKey" + keyPrefix,          // 有序集合
-		listKey:          "timer:cluster_listKey" + keyPrefix,          // 列表
-		setKey:           "timer:cluster_setKey" + keyPrefix,           // 重入集合
-		priorityKey:      "timer:cluster_priorityKey" + keyPrefix,      // 全局优先级的key
-		leaderUniLockKey: "timer:cluster_leaderUniLockKey" + keyPrefix, // 领导唯一锁
-		leaderKey:        "timer:cluster_leaderKey" + keyPrefix,        // 上报当前Leader
-		heartbeatKey:     "timer:cluster_heartbeatKey" + keyPrefix,     // 心跳 有序集合
-		executeInfoKey:   "timer:cluster_executeInfoKey" + keyPrefix,   // 执行情况的key 有序集合
-		usePriority:      op.usePriority,
-		stopChan:         make(chan struct{}),
-		instanceId:       U.String(),
+		ctx:            ctx,
+		cancel:         cancel,
+		redis:          red,
+		cache:          cachex.NewCache(),
+		timeout:        op.timeout,
+		logger:         op.logger,
+		keyPrefix:      keyPrefix,
+		location:       op.location,
+		lockKey:        "timer:cluster_globalLockKey" + keyPrefix,  // 定时器的全局锁
+		zsetKey:        "timer:cluster_zsetKey" + keyPrefix,        // 有序集合
+		listKey:        "timer:cluster_listKey" + keyPrefix,        // 列表
+		setKey:         "timer:cluster_setKey" + keyPrefix,         // 重入集合
+		priorityKey:    "timer:cluster_priorityKey" + keyPrefix,    // 全局优先级的key
+		executeInfoKey: "timer:cluster_executeInfoKey" + keyPrefix, // 执行情况的key 有序集合
+		usePriority:    op.usePriority,
+		stopChan:       make(chan struct{}),
+		instanceId:     U.String(),
 	}
 
 	// 初始化优先级
 
 	if clu.usePriority {
 
-		pri, err := priority.InitPriority(ctx, red, clu.priorityKey, op.priorityVal, priority.WithLogger(clu.logger))
+		pri, err := priority.InitPriority(
+			ctx,
+			red,
+			clu.priorityKey,
+			op.priorityVal,
+			priority.WithLogger(clu.logger),
+			priority.WithInstanceId(clu.instanceId),
+			priority.WithSource("cluster"),
+		)
 		if err != nil {
 			clu.logger.Errorf(ctx, "InitPriority err:%v", err)
 			return nil, err
 		}
 		clu.priority = pri
 	}
+
+	// 初始化leader
+	le, err := leader.InitLeader(
+		ctx,
+		clu.redis,
+		keyPrefix,
+		leader.WithLogger(clu.logger),
+		leader.WithPriority(clu.priority),
+		leader.WithInstanceId(clu.instanceId),
+		leader.WithSource("cluster"),
+	)
+	if err != nil {
+		clu.logger.Infof(ctx, "InitLeader err:%v", err)
+		return nil, err
+	}
+	clu.leader = le
+
+	// 初始化心跳
+	heart, err := heartbeat.InitHeartBeat(
+		ctx,
+		clu.redis,
+		clu.keyPrefix,
+		heartbeat.WithInstanceId(clu.instanceId),
+		heartbeat.WithLeader(clu.leader),
+		heartbeat.WithLogger(clu.logger),
+		heartbeat.WithPriority(clu.priority),
+		heartbeat.WithSource("once"),
+	)
+	if err != nil {
+		clu.logger.Errorf(ctx, "InitHeartBeat err:%v", err)
+		return nil, err
+	}
+	clu.heartbeat = heart
 
 	// 启动守护进程
 	clu.startDaemon()
@@ -119,24 +157,12 @@ func (l *Cluster) Stop() {
 	if l.usePriority && l.priority != nil {
 		l.priority.Close()
 	}
-	l.cleanHeartbeat(true)
+
 	l.wg.Wait()
 }
 
 // 守护任务
 func (l *Cluster) startDaemon() {
-
-	// 领导选举
-	l.wg.Add(1)
-	go l.leaderElection()
-
-	// 心跳上报
-	l.wg.Add(1)
-	go l.heartbeatLoop()
-
-	// 心跳过期清理
-	l.wg.Add(1)
-	go l.cleanHeartbeatLoop()
 
 	// 任务调度
 	l.wg.Add(1)
@@ -146,17 +172,15 @@ func (l *Cluster) startDaemon() {
 	l.wg.Add(1)
 	go l.executeTasks()
 
+	l.wg.Add(1)
+	go l.cleanExecuteInfoLoop()
+
 }
 
-// 心跳上报
-// 需要确定当前存活的实例&当前实例是否是领导
-func (l *Cluster) heartbeatLoop() {
-	defer l.wg.Done()
+func (l *Cluster) cleanExecuteInfoLoop() {
+	l.wg.Done()
 
-	// 先执行一次
-	l.heartbeat()
-
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(time.Minute * 5)
 	defer ticker.Stop()
 
 	for {
@@ -166,162 +190,18 @@ func (l *Cluster) heartbeatLoop() {
 		case <-l.ctx.Done():
 			return
 		case <-ticker.C:
-			l.heartbeat()
-		}
-	}
-
-}
-
-// 单次心跳
-func (l *Cluster) heartbeat() error {
-	err := l.redis.ZAdd(l.ctx, l.heartbeatKey, &redis.Z{
-		Score:  float64(time.Now().UnixMilli()),
-		Member: l.instanceId,
-	}).Err()
-
-	if err != nil {
-		l.logger.Errorf(l.ctx, "heartbeat redis.ZAdd err:%v", err)
-		return err
-	}
-
-	return nil
-}
-
-// 心跳清理（leader可操作）
-func (l *Cluster) cleanHeartbeatLoop() {
-	defer l.wg.Done()
-
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-l.stopChan:
-			return
-		case <-l.ctx.Done():
-			return
-		case <-ticker.C:
-			if l.isCurrentLeader() {
-				l.cleanHeartbeat(false)
+			if l.leader.IsLeader() {
+				l.cleanExecuteInfo()
 			}
 		}
 	}
-
 }
 
-// 单次清理
-func (l *Cluster) cleanHeartbeat(cleanSelf bool) error {
-
-	if cleanSelf {
-		return l.redis.ZRem(l.ctx, l.heartbeatKey, l.instanceId).Err()
-	}
-
-	// 移除心跳
-	l.redis.ZRemRangeByScore(l.ctx, l.heartbeatKey, "0", strconv.FormatInt(time.Now().Add(-15*time.Second).UnixMilli(), 10)).Err()
-
+// 清除过期任务
+func (l *Cluster) cleanExecuteInfo() error {
 	// 移除执行信息
 	l.redis.ZRemRangeByScore(l.ctx, l.executeInfoKey, "0", strconv.FormatInt(time.Now().Add(-15*time.Minute).UnixMilli(), 10)).Err()
 	return nil
-}
-
-// 领导选举
-// 领导作用：全局推选一个人计算执行时间&移入队列，避免每个都进行计算浪费资源
-func (l *Cluster) leaderElection() {
-	defer l.wg.Done()
-
-	// 先执行一次
-	l.getLeaderLock()
-
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			l.getLeaderLock()
-		case <-l.stopChan:
-			return
-		case <-l.ctx.Done():
-			return
-		}
-	}
-
-}
-
-// 成为领导
-func (l *Cluster) getLeaderLock() error {
-
-	// 非当前优先级不用抢leader
-	if l.usePriority && !l.priority.IsLatest(l.ctx) {
-		return nil
-	}
-
-	ctx, cancel := context.WithCancel(l.ctx)
-	defer cancel()
-
-	// 尝试加锁
-	lock, err := lockx.NewGlobalLock(ctx, l.redis, l.leaderUniLockKey)
-	if err != nil {
-		l.logger.Errorf(l.ctx, "getLeaderLock err:%+v", err)
-		return err
-	}
-	if b, _ := lock.Lock(); !b {
-		// 加锁失败 非Reader
-		l.leaderLock.Lock()
-		l.isLeader = false
-		l.leaderLock.Unlock()
-		return nil
-	}
-	defer lock.Unlock()
-
-	// 加锁成功
-	l.leaderLock.Lock()
-	l.isLeader = true
-	l.leaderLock.Unlock()
-
-	// 上报当前的Leader实例
-	l.redis.Set(l.ctx, l.leaderKey, l.instanceId, time.Hour*24)
-
-	l.logger.Infof(l.ctx, "getLeaderLock Instance %s became leader", lock.GetValue())
-
-	go func() {
-		if !l.usePriority || l.priority == nil {
-			return
-		}
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-l.stopChan:
-				return
-			default:
-				if !l.priority.IsLatest(l.ctx) {
-					cancel()
-					return
-				}
-				time.Sleep(100 * time.Millisecond)
-			}
-		}
-	}()
-
-	// 等待超时退出
-	<-lock.GetCtx().Done()
-
-	// 已过期
-	// l.leaderLock.Lock()
-	// l.isLeader = false
-	// l.leaderLock.Unlock()
-
-	return nil
-
-}
-
-// isCurrentLeader 检查当前实例是否是leader
-func (c *Cluster) isCurrentLeader() bool {
-	c.leaderLock.RLock()
-	defer c.leaderLock.RUnlock()
-	return c.isLeader
 }
 
 // scheduleTasks 调度任务（只有leader执行）
@@ -334,7 +214,7 @@ func (c *Cluster) scheduleTasks() {
 	for {
 		select {
 		case <-ticker.C:
-			if !c.isCurrentLeader() {
+			if !c.leader.IsLeader() {
 				continue
 			}
 			if c.usePriority && !c.priority.IsLatest(c.ctx) {

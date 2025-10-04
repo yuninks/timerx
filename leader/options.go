@@ -10,6 +10,7 @@ type Options struct {
 	logger     logger.Logger
 	instanceId string
 	priority   *priority.Priority // 全局优先级
+	source     string             // 来源服务
 }
 
 func defaultOptions() Options {
@@ -47,5 +48,11 @@ func WithPriority(p *priority.Priority) Option {
 func WithInstanceId(instanceId string) Option {
 	return func(o *Options) {
 		o.instanceId = instanceId
+	}
+}
+
+func WithSource(source string) Option {
+	return func(o *Options) {
+		o.source = source
 	}
 }

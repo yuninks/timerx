@@ -114,7 +114,8 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 
 	// 初始化优先级
 	if wo.usePriority {
-		pri, err := priority.InitPriority(ctx,
+		pri, err := priority.InitPriority(
+			ctx,
 			re,
 			keyPrefix,
 			op.priorityVal,
@@ -151,6 +152,7 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 		heartbeat.WithLeader(wo.leader),
 		heartbeat.WithLogger(wo.logger),
 		heartbeat.WithPriority(wo.priority),
+		heartbeat.WithSource("once"),
 	)
 	if err != nil {
 		wo.logger.Errorf(ctx, "InitHeartBeat err:%v", err)

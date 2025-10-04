@@ -47,7 +47,7 @@ func InitHeartBeat(ctx context.Context, ref redis.UniversalClient, keyPrefix str
 		ctx:    ctx,
 		cancel: cancel,
 
-		heartbeatKey: "timer:heartbeat_key" + keyPrefix,
+		heartbeatKey: "timer:heartbeat_key" + op.source + keyPrefix,
 
 		priority:   op.priority,
 		redis:      ref,
