@@ -514,7 +514,7 @@ func (l *Cluster) processTask(taskId string) {
 	l.logger.Infof(ctx, "doTask timer begin taskId:%s", taskId)
 
 	// 上报执行情况
-	executeVal := fmt.Sprintf("%s|%s|%s|%s", taskId, l.instanceId, u.String(), begin.Format(time.RFC3339Nano))
+	executeVal := fmt.Sprintf("tid:%s|insId:%s|uuid:%s|time:%s", taskId, l.instanceId, u.String(), begin.Format(time.RFC3339Nano))
 	l.redis.ZAdd(ctx, l.executeInfoKey, &redis.Z{
 		Score:  float64(begin.UnixMilli()),
 		Member: executeVal,
