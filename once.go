@@ -166,6 +166,12 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 // Close 停止集群定时器
 func (l *Once) Close() {
 	close(l.stopChan)
+	if l.usePriority && l.priority != nil {
+		l.priority.Close()
+	}
+	if l.leader != nil {
+		l.leader.Close()
+	}
 	l.heartbeat.Close()
 	l.cancel()
 	l.wg.Wait()

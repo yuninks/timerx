@@ -113,6 +113,12 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 // Stop 停止集群定时器
 func (l *Cluster) Stop() {
 	close(l.stopChan)
+	if l.cancel != nil {
+		l.cancel()
+	}
+	if l.usePriority && l.priority != nil {
+		l.priority.Close()
+	}
 	l.cleanHeartbeat(true)
 	l.wg.Wait()
 }
