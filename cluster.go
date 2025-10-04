@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/google/uuid"
 	"github.com/yuninks/cachex"
 	"github.com/yuninks/lockx"
@@ -523,7 +523,7 @@ func (l *Cluster) processTask(taskId string) {
 
 	// 上报执行情况
 	executeVal := fmt.Sprintf("tid:%s|insId:%s|uuid:%s|time:%s", taskId, l.instanceId, u.String(), begin.Format(time.RFC3339Nano))
-	l.redis.ZAdd(ctx, l.executeInfoKey, &redis.Z{
+	l.redis.ZAdd(ctx, l.executeInfoKey, redis.Z{
 		Score:  float64(begin.UnixMilli()),
 		Member: executeVal,
 	})

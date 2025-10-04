@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/yuninks/timerx/leader"
 	"github.com/yuninks/timerx/logger"
 	"github.com/yuninks/timerx/priority"
@@ -103,7 +103,7 @@ func (l *HeartBeat) heartbeatLoop() {
 
 // 单次心跳
 func (l *HeartBeat) heartbeat() error {
-	err := l.redis.ZAdd(l.ctx, l.heartbeatKey, &redis.Z{
+	err := l.redis.ZAdd(l.ctx, l.heartbeatKey, redis.Z{
 		Score:  float64(time.Now().UnixMilli()),
 		Member: l.instanceId,
 	}).Err()

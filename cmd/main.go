@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/yuninks/timerx"
 	"github.com/yuninks/timerx/priority"
 )
@@ -252,7 +252,7 @@ func d() {
 		return
 	}
 
-	client.ZAdd(context.Background(), "lockx:test2", &redis.Z{
+	client.ZAdd(context.Background(), "lockx:test2", redis.Z{
 		Score:  50,
 		Member: "test",
 	})

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/google/uuid"
 	"github.com/yuninks/lockx"
 	"github.com/yuninks/timerx/heartbeat"
@@ -338,8 +338,8 @@ func (w *Once) save(taskType OnceTaskType, taskId string, delayTime time.Duratio
 
 	dataExpire := delayTime + time.Minute*30
 
-	pipe.SetEX(w.ctx, w.keyPrefix+redisKey, b, dataExpire)
-	pipe.ZAdd(w.ctx, w.zsetKey, &redis.Z{
+	pipe.SetEx(w.ctx, w.keyPrefix+redisKey, b, dataExpire)
+	pipe.ZAdd(w.ctx, w.zsetKey, redis.Z{
 		Score:  float64(executeTime.UnixMilli()),
 		Member: redisKey,
 	})
@@ -464,7 +464,7 @@ func (l *Once) processTask(key string) {
 
 	// 上报执行情况
 	executeVal := fmt.Sprintf("tid:%s|insId:%s|uuid:%s|time:%s", key, l.instanceId, u.String(), begin.Format(time.RFC3339Nano))
-	l.redis.ZAdd(ctx, l.executeInfoKey, &redis.Z{
+	l.redis.ZAdd(ctx, l.executeInfoKey, redis.Z{
 		Score:  float64(begin.UnixMilli()),
 		Member: executeVal,
 	})
