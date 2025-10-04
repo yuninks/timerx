@@ -174,7 +174,9 @@ func (l *Once) Close() {
 	if l.leader != nil {
 		l.leader.Close()
 	}
-	l.heartbeat.Close()
+	if l.heartbeat != nil {
+		l.heartbeat.Close()
+	}
 	l.cancel()
 	l.wg.Wait()
 }
@@ -275,6 +277,11 @@ func (l *Once) executeTasks() {
 
 			keys, err := l.redis.BLPop(l.ctx, time.Second*10, l.listKey).Result()
 			if err != nil {
+				if err != redis.Nil {
+					l.logger.Errorf(l.ctx, "Failed to pop task: %v", err)
+					// Redis 异常，休眠一会儿再重试
+					time.Sleep(time.Second * 5)
+				}
 				continue
 			}
 

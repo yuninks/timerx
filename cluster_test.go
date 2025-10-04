@@ -10,16 +10,25 @@ import (
 	"github.com/yuninks/timerx"
 )
 
-func TestCluster_AddEveryMonth(t *testing.T) {
-	ctx := context.Background()
-	redis := redis.NewClient(&redis.Options{
+func redisInit() *redis.Client {
+	return redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379",
 		Password: "123456",
 		DB:       0,
 	})
+}
+
+func TestCluster_AddEveryMonth(t *testing.T) {
+	ctx := context.Background()
+	redis := redisInit()
 	defer redis.Close()
 
-	cluster, _ := timerx.InitCluster(ctx, redis, "test")
+	cluster, err := timerx.InitCluster(ctx, redis, "test")
+	if err != nil {
+		t.Errorf("InitCluster failed, err: %v", err)
+		return
+	}
+	defer cluster.Stop()
 
 	taskId := "testTask"
 	hour := 2
@@ -32,7 +41,7 @@ func TestCluster_AddEveryMonth(t *testing.T) {
 	}
 	extendData := "testData"
 
-	err := cluster.EveryMonth(ctx, taskId, 1, hour, minute, second, callback, extendData)
+	err = cluster.EveryMonth(ctx, taskId, 1, hour, minute, second, callback, extendData)
 	if err != nil {
 		t.Errorf("AddEveryMonth failed, err: %v", err)
 	}
@@ -44,12 +53,10 @@ func TestCluster_AddEveryMonth(t *testing.T) {
 
 func TestCluster_AddEveryWeek(t *testing.T) {
 	ctx := context.Background()
-	redis := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-	})
+	redis := redisInit()
 	defer redis.Close()
 
-	cluster,_ := timerx.InitCluster(ctx, redis, "test")
+	cluster, _ := timerx.InitCluster(ctx, redis, "test")
 
 	taskId := "testTask"
 	week := time.Sunday
@@ -73,12 +80,10 @@ func TestCluster_AddEveryWeek(t *testing.T) {
 
 func TestCluster_AddEveryDay(t *testing.T) {
 	ctx := context.Background()
-	redis := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-	})
+	redis := redisInit()
 	defer redis.Close()
 
-	cluster,_ := timerx.InitCluster(ctx, redis, "test")
+	cluster, _ := timerx.InitCluster(ctx, redis, "test")
 
 	taskId := "testTask"
 	hour := 2
@@ -101,12 +106,10 @@ func TestCluster_AddEveryDay(t *testing.T) {
 
 func TestCluster_AddEveryHour(t *testing.T) {
 	ctx := context.Background()
-	redis := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-	})
+	redis := redisInit()
 	defer redis.Close()
 
-	cluster,_ := timerx.InitCluster(ctx, redis, "test")
+	cluster, _ := timerx.InitCluster(ctx, redis, "test")
 
 	taskId := "testTask"
 	minute := 3
@@ -128,12 +131,10 @@ func TestCluster_AddEveryHour(t *testing.T) {
 
 func TestCluster_AddEveryMinute(t *testing.T) {
 	ctx := context.Background()
-	redis := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-	})
+	redis := redisInit()
 	defer redis.Close()
 
-	cluster,_ := timerx.InitCluster(ctx, redis, "test")
+	cluster, _ := timerx.InitCluster(ctx, redis, "test")
 
 	taskId := "testTask"
 	second := 4
@@ -156,16 +157,12 @@ func TestCluster_Add(t *testing.T) {
 	fmt.Println("66666")
 	ctx := context.Background()
 	fmt.Println("66666")
-	redis := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "123456",
-		DB:       0,
-	})
+	redis := redisInit()
 	defer redis.Close()
 
 	t.Log("6666")
 
-	cluster,_ := timerx.InitCluster(ctx, redis, "test")
+	cluster, _ := timerx.InitCluster(ctx, redis, "test")
 
 	taskId := "testTask"
 	dur := time.Second
@@ -185,29 +182,3 @@ func TestCluster_Add(t *testing.T) {
 
 	// TODO: verify the job is added to the cluster and can be executed after the specified duration
 }
-
-// func TestMain(m *testing.M) {
-// 	client := redis.NewClient(&redis.Options{
-// 		Addr:     "127.0.0.1" + ":" + "6379",
-// 		Password: "", // no password set
-// 		DB:       0,  // use default DB
-// 	})
-// 	if client == nil {
-// 		fmt.Println("redis init error")
-// 		return
-// 	}
-// 	// Redis = client
-
-// }
-
-// func TestRedis(t *testing.T) {
-// 	fmt.Println("6666")
-// 	t.Log("fffff")
-// 	// t.Fail()
-// 	// t.Error("ffff")
-// 	// Redis.Set(context.Background(), "dddd", "dddd", 0)
-// 	// str, err := Redis.Get(context.Background(), "dddd").Result()
-// 	// fmt.Println("ssss", str, err)
-// 	// t.Log(str, err)
-// 	// t.Fail()
-// }

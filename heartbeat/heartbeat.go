@@ -64,8 +64,8 @@ func InitHeartBeat(ctx context.Context, ref redis.UniversalClient, keyPrefix str
 }
 
 func (l *HeartBeat) Close() {
-	l.cancel()
 	l.cleanHeartbeat(true)
+	l.cancel()
 	l.wg.Wait()
 }
 

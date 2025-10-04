@@ -26,8 +26,8 @@ func main() {
 
 	// re()
 	// d()
-	// cluster()
-	once()
+	cluster()
+	// once()
 	// prioritys()
 
 	select {}

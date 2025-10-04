@@ -151,11 +151,17 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 // Stop 停止集群定时器
 func (l *Cluster) Stop() {
 	close(l.stopChan)
-	if l.cancel != nil {
-		l.cancel()
-	}
 	if l.usePriority && l.priority != nil {
 		l.priority.Close()
+	}
+	if l.leader != nil {
+		l.leader.Close()
+	}
+	if l.heartbeat != nil {
+		l.heartbeat.Close()
+	}
+	if l.cancel != nil {
+		l.cancel()
 	}
 
 	l.wg.Wait()
@@ -481,6 +487,8 @@ func (c *Cluster) executeTasks() {
 			if err != nil {
 				if err != redis.Nil {
 					c.logger.Errorf(c.ctx, "Failed to pop task: %v", err)
+					// Redis 异常，休眠一会儿
+					time.Sleep(5 * time.Second)
 				}
 				continue
 			}
