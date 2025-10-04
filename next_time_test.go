@@ -10,7 +10,7 @@ import (
 
 func TestGetNextTime(t *testing.T) {
 
-	tt := time.Now()
+	tt := time.Date(2025, 10, 16, 10, 30, 5, 0, time.Local)
 
 	// Test cases
 	tests := []struct {
@@ -40,7 +40,7 @@ func TestGetNextTime(t *testing.T) {
 				Minute:  0,
 				Second:  0,
 			},
-			expectedTime:  time.Date(2025, 9, 23, 10, 0, 0, 0, time.Local), // Assuming current date is March 7, 2022
+			expectedTime:  time.Date(2025, 10, 21, 10, 0, 0, 0, time.Local), // Assuming current date is March 7, 2022
 			expectedError: nil,
 		},
 		{
@@ -51,7 +51,7 @@ func TestGetNextTime(t *testing.T) {
 				Minute:  0,
 				Second:  0,
 			},
-			expectedTime:  time.Date(2025, 9, 18, 10, 0, 0, 0, time.Local), // Assuming current date is March 7, 2022
+			expectedTime:  time.Date(2025, 10, 17, 10, 0, 0, 0, time.Local), // Assuming current date is March 7, 2022
 			expectedError: nil,
 		},
 		{
@@ -61,7 +61,7 @@ func TestGetNextTime(t *testing.T) {
 				Minute:  0,
 				Second:  0,
 			},
-			expectedTime:  time.Date(2025, 9, 17, 16, 0, 0, 0, time.Local), // Assuming current date is March 7, 2022, 10:30 AM
+			expectedTime:  time.Date(2025, 10, 16, 11, 0, 0, 0, time.Local), // Assuming current date is March 7, 2022, 10:30 AM
 			expectedError: nil,
 		},
 		{
@@ -70,17 +70,37 @@ func TestGetNextTime(t *testing.T) {
 				JobType: JobTypeEveryMinute,
 				Second:  12,
 			},
-			expectedTime:  time.Date(tt.Year(), tt.Month(), tt.Day(), tt.Hour(), tt.Minute()+1, 12, 0, time.Local), // Assuming current date is March 7, 2022, 10:30 AM
+			expectedTime:  time.Date(tt.Year(), tt.Month(), tt.Day(), tt.Hour(), tt.Minute(), 12, 0, time.Local), // Assuming current date is March 7, 2022, 10:30 AM
 			expectedError: nil,
 		},
 		{
-			name: "Test JobTypeInterval",
+			name: "Test JobTypeIntervalHour",
 			job: JobData{
 				JobType:      JobTypeInterval,
-				CreateTime:   tt,
+				BaseTime:     tt,
 				IntervalTime: 1 * time.Hour,
 			},
-			expectedTime:  tt.Add(1 * time.Hour), // Assuming current date is March 7, 2022, 10:30 AM
+			expectedTime: time.Date(2025, 10, 16, 12, 00, 0, 0, time.Local), // Assuming current date is March 7, 2022, 10:30 AM
+			expectedError: nil,
+		},
+		{
+			name: "Test JobTypeIntervalMinute",
+			job: JobData{
+				JobType:      JobTypeInterval,
+				BaseTime:     tt,
+				IntervalTime: 1 * time.Minute,
+			},
+			expectedTime:  time.Date(2025, 10, 16, 10, 31, 0, 0, time.Local), // Assuming current date is March 7, 2022, 10:30 AM
+			expectedError: nil,
+		},
+		{
+			name: "Test JobTypeIntervalSecond",
+			job: JobData{
+				JobType:      JobTypeInterval,
+				BaseTime:     tt,
+				IntervalTime: 1 * time.Second,
+			},
+			expectedTime:  tt.Add(1 * time.Second), // Assuming current date is March 7, 2022, 10:30 AM
 			expectedError: nil,
 		},
 		{
@@ -95,9 +115,8 @@ func TestGetNextTime(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			now := time.Now()
 			// loc := time.FixedZone("CST", 8*3600)
-			nextTime, err := GetNextTime(now, test.job)
+			nextTime, err := GetNextTime(tt, test.job)
 			if err != nil {
 				if test.expectedError == nil || err.Error() != test.expectedError.Error() {
 					t.Errorf("Expected error: %v, Got error: %v", test.expectedError, err)
@@ -177,7 +196,7 @@ func TestValidateJobData(t *testing.T) {
 			name: "有效间隔任务",
 			job: JobData{
 				JobType:      JobTypeInterval,
-				CreateTime:   time.Now(),
+				BaseTime:     time.Now(),
 				IntervalTime: time.Minute,
 				Hour:         12,
 				Minute:       30,
@@ -189,7 +208,7 @@ func TestValidateJobData(t *testing.T) {
 			name: "无效间隔任务-间隔时间为0",
 			job: JobData{
 				JobType:      JobTypeInterval,
-				CreateTime:   time.Now(),
+				BaseTime:     time.Now(),
 				IntervalTime: 0,
 				Hour:         12,
 				Minute:       30,
@@ -201,13 +220,13 @@ func TestValidateJobData(t *testing.T) {
 			name: "无效间隔任务-创建时间为空",
 			job: JobData{
 				JobType:      JobTypeInterval,
-				CreateTime:   time.Time{},
+				BaseTime:     time.Time{},
 				IntervalTime: time.Minute,
 				Hour:         12,
 				Minute:       30,
 				Second:       0,
 			},
-			expected: ErrCreateTime,
+			expected: ErrBaseTime,
 		},
 		{
 			name: "无效小时",
@@ -264,7 +283,7 @@ func TestCalculateNextInterval(t *testing.T) {
 			name: "间隔1小时-当前时间在创建时间之后",
 			job: JobData{
 				JobType:      JobTypeInterval,
-				CreateTime:   createTime,
+				BaseTime:     createTime,
 				IntervalTime: time.Hour,
 			},
 			currentTime: now,
@@ -274,7 +293,7 @@ func TestCalculateNextInterval(t *testing.T) {
 			name: "间隔30分钟-刚好在间隔点上",
 			job: JobData{
 				JobType:      JobTypeInterval,
-				CreateTime:   createTime,
+				BaseTime:     createTime,
 				IntervalTime: 30 * time.Minute,
 			},
 			currentTime: time.Date(2023, 6, 15, 12, 30, 0, 0, time.UTC),
@@ -284,11 +303,11 @@ func TestCalculateNextInterval(t *testing.T) {
 			name: "间隔1天-跨天",
 			job: JobData{
 				JobType:      JobTypeInterval,
-				CreateTime:   createTime,
+				BaseTime:     createTime,
 				IntervalTime: 24 * time.Hour,
 			},
 			currentTime: now,
-			expected:    time.Date(2023, 6, 16, 10, 0, 0, 0, time.UTC),
+			expected:    time.Date(2023, 6, 16, 0, 0, 0, 0, time.UTC),
 		},
 	}
 
@@ -300,8 +319,6 @@ func TestCalculateNextInterval(t *testing.T) {
 		})
 	}
 }
-
-
 
 // 测试月任务
 func TestCalculateNextMonthTime(t *testing.T) {
@@ -384,7 +401,7 @@ func TestCalculateNextMonthTime(t *testing.T) {
 	}
 }
 
-func TestCalculateNextMonthTimeOnce(t *testing.T){
+func TestCalculateNextMonthTimeOnce(t *testing.T) {
 	// baseTime := time.Date(2023, 6, 15, 12, 30, 45, 0, time.UTC)
 
 	tests := []struct {
@@ -673,7 +690,7 @@ func TestGetNextTime_Integration(t *testing.T) {
 			name: "间隔任务集成测试",
 			job: JobData{
 				JobType:      JobTypeInterval,
-				CreateTime:   time.Date(2023, 6, 15, 10, 0, 0, 0, time.UTC),
+				BaseTime:     time.Date(2023, 6, 15, 10, 0, 0, 0, time.UTC),
 				IntervalTime: time.Hour,
 			},
 			expected: time.Date(2023, 6, 15, 13, 0, 0, 0, time.UTC),

@@ -30,7 +30,6 @@ type JobData struct {
 	TaskId       string        // 任务ID 全局唯一键(only cluster)
 	NextTime     time.Time     // 下次执行时间
 	BaseTime     time.Time     // 基准时间(间隔的基准时间)
-	CreateTime   time.Time     // 任务创建时间
 	IntervalTime time.Duration // 任务间隔时间
 	Month        time.Month    // 每年的第几个月
 	Weekday      time.Weekday  // 每周的周几

@@ -4,7 +4,6 @@ package timerx
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"runtime/debug"
 	"sync"
@@ -67,20 +66,21 @@ func (l *Single) startDaemon() {
 }
 
 // 停止所有定时任务
-func (s *Single) Stop() {
-	close(s.stopChan)
+func (l *Single) Stop() {
+	close(l.stopChan)
 
-	if s.cancel != nil {
-		s.cancel()
+	if l.cancel != nil {
+		l.cancel()
 	}
 
-	s.wg.Wait()
+	l.wg.Wait()
+	l.logger.Infof(l.ctx, "timer single: stopped")
 }
 
 // 获取任务数量
-func (s *Single) TaskCount() int {
+func (l *Single) TaskCount() int {
 	count := 0
-	s.workerList.Range(func(k, v interface{}) bool {
+	l.workerList.Range(func(k, v interface{}) bool {
 		count++
 		return true
 	})
@@ -164,16 +164,16 @@ func (s *Single) cleanupLoop() {
 // @return error
 func (c *Single) EveryMonth(ctx context.Context, taskId string, day int, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
 
-	nowTime := time.Now().In(c.location)
+	// nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
-		JobType:    JobTypeEveryMonth,
-		TaskId:     taskId,
-		CreateTime: nowTime,
-		Day:        day,
-		Hour:       hour,
-		Minute:     minute,
-		Second:     second,
+		JobType: JobTypeEveryMonth,
+		TaskId:  taskId,
+		// CreateTime: nowTime,
+		Day:    day,
+		Hour:   hour,
+		Minute: minute,
+		Second: second,
 	}
 
 	return c.addJob(ctx, jobData, callback, extendData)
@@ -187,16 +187,16 @@ func (c *Single) EveryMonth(ctx context.Context, taskId string, day int, hour in
 // @param minute int 分钟
 // @param second int 秒
 func (c *Single) EveryWeek(ctx context.Context, taskId string, week time.Weekday, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
-	nowTime := time.Now().In(c.location)
+	// nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
-		JobType:    JobTypeEveryWeek,
-		TaskId:     taskId,
-		CreateTime: nowTime,
-		Weekday:    week,
-		Hour:       hour,
-		Minute:     minute,
-		Second:     second,
+		JobType: JobTypeEveryWeek,
+		TaskId:  taskId,
+		// CreateTime: nowTime,
+		Weekday: week,
+		Hour:    hour,
+		Minute:  minute,
+		Second:  second,
 	}
 
 	return c.addJob(ctx, jobData, callback, extendData)
@@ -204,15 +204,15 @@ func (c *Single) EveryWeek(ctx context.Context, taskId string, week time.Weekday
 
 // 每天执行一次
 func (c *Single) EveryDay(ctx context.Context, taskId string, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
-	nowTime := time.Now().In(c.location)
+	// nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
-		JobType:    JobTypeEveryDay,
-		TaskId:     taskId,
-		CreateTime: nowTime,
-		Hour:       hour,
-		Minute:     minute,
-		Second:     second,
+		JobType: JobTypeEveryDay,
+		TaskId:  taskId,
+		// CreateTime: nowTime,
+		Hour:   hour,
+		Minute: minute,
+		Second: second,
 	}
 
 	return c.addJob(ctx, jobData, callback, extendData)
@@ -220,14 +220,14 @@ func (c *Single) EveryDay(ctx context.Context, taskId string, hour int, minute i
 
 // 每小时执行一次
 func (c *Single) EveryHour(ctx context.Context, taskId string, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
-	nowTime := time.Now().In(c.location)
+	// nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
-		JobType:    JobTypeEveryHour,
-		TaskId:     taskId,
-		CreateTime: nowTime,
-		Minute:     minute,
-		Second:     second,
+		JobType: JobTypeEveryHour,
+		TaskId:  taskId,
+		// CreateTime: nowTime,
+		Minute: minute,
+		Second: second,
 	}
 
 	return c.addJob(ctx, jobData, callback, extendData)
@@ -235,13 +235,13 @@ func (c *Single) EveryHour(ctx context.Context, taskId string, minute int, secon
 
 // 每分钟执行一次
 func (c *Single) EveryMinute(ctx context.Context, taskId string, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
-	nowTime := time.Now().In(c.location)
+	// nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
-		JobType:    JobTypeEveryMinute,
-		TaskId:     taskId,
-		CreateTime: nowTime,
-		Second:     second,
+		JobType: JobTypeEveryMinute,
+		TaskId:  taskId,
+		// CreateTime: nowTime,
+		Second: second,
 	}
 
 	return c.addJob(ctx, jobData, callback, extendData)
@@ -253,13 +253,17 @@ func (c *Single) EverySpace(ctx context.Context, taskId string, spaceTime time.D
 
 	if spaceTime < 0 {
 		c.logger.Errorf(ctx, "间隔时间不能小于0")
-		return 0, errors.New("间隔时间不能小于0")
+		return 0, ErrIntervalTime
 	}
 
+	// 获取当天的零点时间
+	zeroTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), 0, 0, 0, 0, nowTime.Location())
+
 	jobData := JobData{
-		JobType:      JobTypeInterval,
-		TaskId:       taskId,
-		CreateTime:   nowTime,
+		JobType: JobTypeInterval,
+		TaskId:  taskId,
+		// CreateTime:   nowTime,
+		BaseTime:     zeroTime,
 		IntervalTime: spaceTime,
 	}
 
@@ -417,10 +421,13 @@ func (s *Single) executeTask(ctx context.Context, timer timerStr, originTime tim
 		}()
 
 		// 执行回调
+		begin := time.Now()
 		if err := s.doTask(traceCtx, timer, originTime); err != nil {
 			s.logger.Errorf(traceCtx, "timer: 任务执行失败: %s", err.Error())
 		}
-
+		s.logger.Infof(traceCtx, "timer Single end taskId:%s originTime:%d cost:%dms", timer.TaskId, originTime.UnixMilli(), time.Since(begin).Milliseconds())
+	case <-traceCtx.Done():
+		s.logger.Errorf(traceCtx, "timer: 任务执行超时: %s", timer.TaskId)
 	default:
 		// 任务正在执行中，跳过本次
 		s.logger.Infof(traceCtx, "timer: 任务正在执行中，跳过本次 %s", timer.TaskId)

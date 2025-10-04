@@ -355,15 +355,15 @@ func (c *Cluster) scheduleTasks() {
 // @param extendData 扩展数据
 // @return error
 func (c *Cluster) EveryMonth(ctx context.Context, taskId string, day int, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) error {
-	nowTime := time.Now().In(c.location)
+	// nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
-		JobType:    JobTypeEveryMonth,
-		CreateTime: nowTime,
-		Day:        day,
-		Hour:       hour,
-		Minute:     minute,
-		Second:     second,
+		JobType: JobTypeEveryMonth,
+		// CreateTime: nowTime,
+		Day:    day,
+		Hour:   hour,
+		Minute: minute,
+		Second: second,
 	}
 
 	return c.addJob(ctx, taskId, jobData, callback, extendData)
@@ -377,15 +377,15 @@ func (c *Cluster) EveryMonth(ctx context.Context, taskId string, day int, hour i
 // @param minute int 分钟
 // @param second int 秒
 func (c *Cluster) EveryWeek(ctx context.Context, taskId string, week time.Weekday, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) error {
-	nowTime := time.Now().In(c.location)
+	// nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
-		JobType:    JobTypeEveryWeek,
-		CreateTime: nowTime,
-		Weekday:    week,
-		Hour:       hour,
-		Minute:     minute,
-		Second:     second,
+		JobType: JobTypeEveryWeek,
+		// CreateTime: nowTime,
+		Weekday: week,
+		Hour:    hour,
+		Minute:  minute,
+		Second:  second,
 	}
 
 	return c.addJob(ctx, taskId, jobData, callback, extendData)
@@ -393,14 +393,14 @@ func (c *Cluster) EveryWeek(ctx context.Context, taskId string, week time.Weekda
 
 // 每天执行一次
 func (c *Cluster) EveryDay(ctx context.Context, taskId string, hour int, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) error {
-	nowTime := time.Now().In(c.location)
+	// nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
-		JobType:    JobTypeEveryDay,
-		CreateTime: nowTime,
-		Hour:       hour,
-		Minute:     minute,
-		Second:     second,
+		JobType: JobTypeEveryDay,
+		// CreateTime: nowTime,
+		Hour:   hour,
+		Minute: minute,
+		Second: second,
 	}
 
 	return c.addJob(ctx, taskId, jobData, callback, extendData)
@@ -408,13 +408,13 @@ func (c *Cluster) EveryDay(ctx context.Context, taskId string, hour int, minute 
 
 // 每小时执行一次
 func (c *Cluster) EveryHour(ctx context.Context, taskId string, minute int, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) error {
-	nowTime := time.Now().In(c.location)
+	// nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
-		JobType:    JobTypeEveryHour,
-		CreateTime: nowTime,
-		Minute:     minute,
-		Second:     second,
+		JobType: JobTypeEveryHour,
+		// CreateTime: nowTime,
+		Minute: minute,
+		Second: second,
 	}
 
 	return c.addJob(ctx, taskId, jobData, callback, extendData)
@@ -422,12 +422,12 @@ func (c *Cluster) EveryHour(ctx context.Context, taskId string, minute int, seco
 
 // 每分钟执行一次
 func (c *Cluster) EveryMinute(ctx context.Context, taskId string, second int, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) error {
-	nowTime := time.Now().In(c.location)
+	// nowTime := time.Now().In(c.location)
 
 	jobData := JobData{
-		JobType:    JobTypeEveryMinute,
-		CreateTime: nowTime,
-		Second:     second,
+		JobType: JobTypeEveryMinute,
+		// CreateTime: nowTime,
+		Second: second,
 	}
 
 	return c.addJob(ctx, taskId, jobData, callback, extendData)
@@ -448,7 +448,6 @@ func (c *Cluster) EverySpace(ctx context.Context, taskId string, spaceTime time.
 	jobData := JobData{
 		JobType:      JobTypeInterval,
 		BaseTime:     zeroTime, // 默认当天的零点
-		CreateTime:   nowTime,
 		IntervalTime: spaceTime,
 	}
 

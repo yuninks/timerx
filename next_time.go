@@ -70,8 +70,8 @@ func validateJobData(job JobData) error {
 		if job.IntervalTime <= 0 {
 			return ErrIntervalTime
 		}
-		if job.CreateTime.IsZero() {
-			return ErrCreateTime
+		if job.BaseTime.IsZero() {
+			return ErrBaseTime
 		}
 	}
 
@@ -88,19 +88,21 @@ func validateJobData(job JobData) error {
 	return nil
 }
 
+// 计算间隔任务下一次执行时间
+// 固定基准时间，因为在不同的实例中需要对齐基准点
 func calculateNextInterval(t time.Time, job JobData) (*time.Time, error) {
-	if job.CreateTime.IsZero() {
-		return nil, ErrCreateTime
+	if job.BaseTime.IsZero() {
+		return nil, ErrBaseTime
 	}
 	if job.IntervalTime <= 0 {
 		return nil, ErrIntervalTime
 	}
-	// 计算从创建时间到当前时间经过了多少个间隔
-	elapsed := t.Sub(job.CreateTime)
+	// 计算从基准时间到当前时间经过了多少个间隔
+	elapsed := t.Sub(job.BaseTime)
 	intervals := elapsed / job.IntervalTime
 
 	// 计算下一个执行时间
-	next := job.CreateTime.Add((intervals + 1) * job.IntervalTime)
+	next := job.BaseTime.Add((intervals + 1) * job.IntervalTime)
 
 	// 需要整的
 	next = next.Round(job.IntervalTime)

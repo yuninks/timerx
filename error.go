@@ -21,6 +21,8 @@ var (
 	ErrWeekday = errors.New("weekday must be between Sunday and Saturday")
 	// 创建时间不能为空
 	ErrCreateTime = errors.New("create time can not be empty")
+	// 基准时间不能为空
+	ErrBaseTime = errors.New("base time can not be empty")
 	// 间隔时间必须大于0
 	ErrIntervalTime = errors.New("interval time must be greater than 0")
 	// 任务Id已存在
