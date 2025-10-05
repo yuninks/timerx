@@ -10,6 +10,8 @@ import (
 	"github.com/yuninks/timerx"
 )
 
+var save_path = "./cluster.log"
+
 func main() {
 
 	ctx := context.Background()
@@ -252,7 +254,7 @@ func callback(ctx context.Context, extendData any) error {
 	fmt.Println("任务执行了", extendData, "时间:", time.Now().Format("2006-01-02 15:04:05"))
 
 	// 追加到文件
-	file, err := os.OpenFile("./test.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(save_path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("打开文件失败:", err)
 		return err
