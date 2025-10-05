@@ -14,7 +14,7 @@ import (
 )
 
 // 心跳
-// 作用：上报实例存活状态
+// 作用：上报实例最新存活状态,清理过期实例
 // 依赖：leader priority
 
 type HeartBeat struct {

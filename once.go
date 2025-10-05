@@ -120,6 +120,9 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 			keyPrefix,
 			op.priorityVal,
 			priority.WithLogger(wo.logger),
+			priority.WithInstanceId(wo.instanceId),
+			priority.WithSource("once"),
+		
 		)
 		if err != nil {
 			wo.logger.Errorf(ctx, "InitPriority err:%v", err)
@@ -136,6 +139,7 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 		leader.WithLogger(wo.logger),
 		leader.WithPriority(wo.priority),
 		leader.WithInstanceId(wo.instanceId),
+		leader.WithSource("once"),
 	)
 	if err != nil {
 		wo.logger.Infof(ctx, "InitLeader err:%v", err)
