@@ -3,6 +3,8 @@ package timerx
 import (
 	"errors"
 	"time"
+
+	"github.com/robfig/cron/v3"
 )
 
 // 计算该任务下次执行时间
@@ -32,6 +34,8 @@ func GetNextTime(t time.Time, job JobData) (*time.Time, error) {
 		next, err = calculateNextMinuteTime(t, job)
 	case JobTypeInterval:
 		next, err = calculateNextInterval(t, job)
+	case JobTypeCron:
+		next, err = calculateNextCronTime(t, job)
 	default:
 		return nil, errors.New("未知的任务类型: " + string(job.JobType))
 	}
@@ -72,6 +76,14 @@ func validateJobData(job JobData) error {
 		}
 		if job.BaseTime.IsZero() {
 			return ErrBaseTime
+		}
+	case JobTypeCron:
+		if job.CronExpression == "" {
+			return ErrCronExpression
+		}
+		_, err := calculateNextCronTime(time.Now(), job)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -214,6 +226,32 @@ func calculateNextMinuteTime(t time.Time, job JobData) (*time.Time, error) {
 	// 下一分钟的时间
 	nextMinuteTime := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute()+1, job.Second, 0, t.Location())
 	return &nextMinuteTime, nil
+}
+
+// 计算cron任务下下次执行时间
+func calculateNextCronTime(t time.Time, job JobData) (*time.Time, error) {
+	if job.CronExpression == "" {
+		return nil, ErrCronExpression
+	}
+
+	s := *job.CronSchedule
+
+	next := s.Next(t)
+	return &next, nil
+}
+
+func GetCronSche(CronExpression string, cronParser *cron.Parser) (*cron.Schedule, error) {
+	if CronExpression == "" {
+		return nil, ErrCronExpression
+	}
+	if cronParser == nil {
+		return nil, ErrCronParser
+	}
+	sche, err := cronParser.Parse(CronExpression)
+	if err != nil {
+		return nil, err
+	}
+	return &sche, nil
 }
 
 // 检查是否本周期可以运行

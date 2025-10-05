@@ -3,6 +3,7 @@ package timerx
 import (
 	"time"
 
+	"github.com/robfig/cron/v3"
 	"github.com/yuninks/timerx/logger"
 )
 
@@ -14,9 +15,13 @@ type Options struct {
 	priorityVal   int64
 	batchSize     int
 	maxRetryCount int
+	cronParser    *cron.Parser // cron表达式解析器
 }
 
 func defaultOptions() Options {
+
+	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+
 	return Options{
 		logger:        logger.NewLogger(),
 		location:      time.Local,
@@ -25,6 +30,7 @@ func defaultOptions() Options {
 		priorityVal:   0,
 		batchSize:     100,
 		maxRetryCount: 0,
+		cronParser:    &parser,
 	}
 }
 
@@ -82,5 +88,41 @@ func WithMaxRetryCount(count int) Option {
 			count = 0
 		}
 		o.maxRetryCount = count
+	}
+}
+
+// 添加cron表达式解析器
+func WithCronParser(parser cron.Parser) Option {
+	return func(o *Options) {
+		o.cronParser = &parser
+	}
+}
+
+// 设置cron表达式解析器 秒级
+// "*/5 * * * * ?" => 每隔5秒执行一次
+// "0 0 0 * * ?" => 每天零点执行一次
+// "0 0 0 1 * ?" => 每月1日零点执行一次
+// "0 */5 * * * ?" => 每隔5分钟执行一次
+func WithCronParserSecond() Option {
+	return func(o *Options) {
+		parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+		o.cronParser = &parser
+	}
+}
+
+// 设置cron表达式解析器
+// cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor
+func WithCronParserOption(options cron.ParseOption) Option {
+	return func(o *Options) {
+		parser := cron.NewParser(options)
+		o.cronParser = &parser
+	}
+}
+
+// Cron表达式 与Linux的定时任务兼容
+func WithCronParserLinux() Option {
+	return func(o *Options) {
+		parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+		o.cronParser = &parser
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/robfig/cron/v3"
 	"github.com/yuninks/timerx"
 	"github.com/yuninks/timerx/priority"
 )
@@ -101,7 +102,7 @@ type OnceWorker struct{}
 
 func (l OnceWorker) Worker(ctx context.Context, taskType timerx.OnceTaskType, taskId string, attachData interface{}) *timerx.OnceWorkerResp {
 	// 追加写入文件
-	file, err := os.OpenFile("./test.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile("./test3.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		panic(err)
 	}
@@ -142,7 +143,7 @@ func cluster() {
 	// log := loggerx.NewLogger(ctx,loggerx.SetToConsole(),loggerx.SetEscapeHTML(false))
 	// _ = log
 
-	cluster, _ := timerx.InitCluster(ctx, client, "test", timerx.WithPriority(103))
+	cluster, _ := timerx.InitCluster(ctx, client, "test2", timerx.WithPriority(104))
 	err := cluster.EverySpace(ctx, "test_space1", 1*time.Second, aa, "这是秒任务1")
 	fmt.Println(err)
 	err = cluster.EverySpace(ctx, "test_space2", 2*time.Second, aa, "这是秒任务2")
@@ -166,6 +167,18 @@ func cluster() {
 	fmt.Println(err)
 	err = cluster.EveryDay(ctx, "test_day3", 10, 30, 30, aa, "这是天任务3")
 	fmt.Println(err)
+
+	// 默认秒级表达式
+	err = cluster.Cron(ctx, "test_cron1", "*/5 * * * * ?", aa, "这是cron任务1")
+	fmt.Println(err)
+	err = cluster.Cron(ctx, "test_cron2", "0/5 * * * * ?", aa, "这是cron任务2")
+	fmt.Println("这是cron任务2:", err)
+	// 自定义解析器
+	err = cluster.Cron(ctx, "test_cron3", "@every 2s", aa, "这是cron任务3", timerx.WithCronParserOption(cron.Descriptor))
+	fmt.Println("这是cron任务3:", err)
+	// Linux标准解析器
+	err = cluster.Cron(ctx, "test_cron4", "*/5 * * * *", aa, "这是cron任务4", timerx.WithCronParserLinux())
+	fmt.Println("这是cron任务4:", err)
 }
 
 func worker() {

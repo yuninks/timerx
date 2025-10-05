@@ -29,4 +29,8 @@ var (
 	ErrTaskIdExists = errors.New("taskId already exists")
 	// 任务已执行
 	ErrTaskExecuted = errors.New("task already executed")
+	// cron表达式错误
+	ErrCronExpression = errors.New("cron expression error")
+	// ErrCronParser 错误
+	ErrCronParser = errors.New("cron parser error")
 )

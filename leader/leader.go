@@ -62,7 +62,7 @@ func InitLeader(ctx context.Context, ref redis.UniversalClient, keyPrefix string
 	l.wg.Add(1)
 	go l.leaderElection()
 
-	l.logger.Infof(l.ctx, "InitLeader InstanceId %s lockKey:%s", l.instanceId, l.leaderUniLockKey)
+	l.logger.Infof(l.ctx, "InitLeader InstanceId %s lockKey:%s leaderKey:%s", l.instanceId, l.leaderUniLockKey, l.leaderKey)
 
 	return l, nil
 }

@@ -3,6 +3,8 @@ package timerx
 import (
 	"context"
 	"time"
+
+	"github.com/robfig/cron/v3"
 )
 
 type timerStr struct {
@@ -23,20 +25,23 @@ const (
 	JobTypeEveryMinute JobType = "every_minute" // 每分钟
 	JobTypeEverySecond JobType = "every_second" // 每秒
 	JobTypeInterval    JobType = "interval"     // 指定时间间隔
+	JobTypeCron        JobType = "cron"         // cron表达式
 )
 
 type JobData struct {
-	JobType      JobType       // 任务类型
-	TaskId       string        // 任务ID 全局唯一键(only cluster)
-	NextTime     time.Time     // 下次执行时间
-	BaseTime     time.Time     // 基准时间(间隔的基准时间)
-	IntervalTime time.Duration // 任务间隔时间
-	Month        time.Month    // 每年的第几个月
-	Weekday      time.Weekday  // 每周的周几
-	Day          int           // 每月的第几天
-	Hour         int           // 每天的第几个小时
-	Minute       int           // 每小时的第几分钟
-	Second       int           // 每分钟的第几秒
+	JobType        JobType        // 任务类型
+	TaskId         string         // 任务ID 全局唯一键(only cluster)
+	NextTime       time.Time      // 下次执行时间
+	BaseTime       time.Time      // 基准时间(间隔的基准时间)
+	IntervalTime   time.Duration  // 任务间隔时间
+	Month          time.Month     // 每年的第几个月
+	Weekday        time.Weekday   // 每周的周几
+	Day            int            // 每月的第几天
+	Hour           int            // 每天的第几个小时
+	Minute         int            // 每小时的第几分钟
+	Second         int            // 每分钟的第几秒
+	CronExpression string         // cron表达式
+	CronSchedule   *cron.Schedule // cron表达式解析后的数据
 }
 
 // 定义各个回调函数

@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/robfig/cron/v3"
 	"github.com/yuninks/cachex"
 	"github.com/yuninks/lockx"
 	"github.com/yuninks/timerx/heartbeat"
@@ -48,9 +49,10 @@ type Cluster struct {
 	priorityKey string             // 全局优先级的key
 	usePriority bool               // 是否使用优先级
 
-	leader    *leader.Leader       // Leader
-	heartbeat *heartbeat.HeartBeat // 心跳
-	cache     *cachex.Cache        // 本地缓存
+	leader     *leader.Leader       // Leader
+	heartbeat  *heartbeat.HeartBeat // 心跳
+	cache      *cachex.Cache        // 本地缓存
+	cronParser *cron.Parser         // cron表达式解析器
 }
 
 // 初始化定时器
@@ -85,6 +87,7 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 		usePriority:    op.usePriority,
 		stopChan:       make(chan struct{}),
 		instanceId:     U.String(),
+		cronParser:     op.cronParser,
 	}
 
 	// 初始化优先级
@@ -344,6 +347,44 @@ func (c *Cluster) EverySpace(ctx context.Context, taskId string, spaceTime time.
 	}
 
 	return c.addJob(ctx, taskId, jobData, callback, extendData)
+}
+
+// 定时任务
+// 使用的是秒级cron表达式，可以使用Option设置cronParser
+// @param ctx context.Context 上下文
+// @param taskId string 任务ID
+// @param cronExpression string cron表达式
+// @param callback callback 回调函数
+// @param extendData interface{} 扩展数据
+// @return error
+func (l *Cluster) Cron(ctx context.Context, taskId string, cronExpression string, callback func(ctx context.Context, extendData any) error, extendData any, opt ...Option) error {
+	nowTime := time.Now().In(l.location)
+	// 获取当天的零点时间
+	zeroTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), 0, 0, 0, 0, nowTime.Location())
+
+	options := Options{}
+	for _, o := range opt {
+		o(&options)
+	}
+	cronParser := l.cronParser
+	if options.cronParser != nil {
+		cronParser = options.cronParser
+	}
+
+	sche, err := GetCronSche(cronExpression, cronParser)
+	if err != nil {
+		l.logger.Errorf(ctx, "Cron cronExpression error:%s", err.Error())
+		return err
+	}
+
+	jobData := JobData{
+		JobType:        JobTypeCron,
+		BaseTime:       zeroTime, // 默认当天的零点
+		CronExpression: cronExpression,
+		CronSchedule:   sche,
+	}
+
+	return l.addJob(ctx, taskId, jobData, callback, extendData)
 }
 
 // 统一添加任务
