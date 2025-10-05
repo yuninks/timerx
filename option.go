@@ -20,7 +20,8 @@ type Options struct {
 
 func defaultOptions() Options {
 
-	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	// 默认使用Linux的定时任务兼容
+	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 
 	return Options{
 		logger:        logger.NewLogger(),
