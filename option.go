@@ -127,3 +127,21 @@ func WithCronParserLinux() Option {
 		o.cronParser = &parser
 	}
 }
+
+// Cron表达式 符号
+// @yearly @annually => 每年执行一次，等同于 "0 0 0 1 1 *"
+// @monthly => 每月执行一次，等同于 "0 0 0 1 * *"
+// @weekly => 每周执行一次，等同于 "0 0 0 * * 0"
+// @daily @midnight => 每天执行一次，等同于 "0 0 0 * * *"
+// @hourly => 每小时执行一次，等同于 "0 0 * * * *"
+// @minutely => 每分钟执行一次，等同于 "0 * * * * *"
+// @secondly => 每秒执行一次，等同于 "* * * * * *"
+// @every(time.Duration) => 每隔指定时间执行一次，等同于 "@every 5s"
+
+func WithCronParserDescriptor() Option {
+	return func(o *Options) {
+		parser := cron.NewParser(cron.Descriptor)
+		o.cronParser = &parser
+	}
+}
+

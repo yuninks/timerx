@@ -254,6 +254,7 @@ func (c *Cluster) EveryMonth(ctx context.Context, taskId string, day int, hour i
 
 	jobData := JobData{
 		JobType: JobTypeEveryMonth,
+		TaskId:  taskId,
 		// CreateTime: nowTime,
 		Day:    day,
 		Hour:   hour,
@@ -261,7 +262,7 @@ func (c *Cluster) EveryMonth(ctx context.Context, taskId string, day int, hour i
 		Second: second,
 	}
 
-	return c.addJob(ctx, taskId, jobData, callback, extendData)
+	return c.addJob(ctx, jobData, callback, extendData)
 }
 
 // 每周执行一次
@@ -276,6 +277,7 @@ func (c *Cluster) EveryWeek(ctx context.Context, taskId string, week time.Weekda
 
 	jobData := JobData{
 		JobType: JobTypeEveryWeek,
+		TaskId:  taskId,
 		// CreateTime: nowTime,
 		Weekday: week,
 		Hour:    hour,
@@ -283,7 +285,7 @@ func (c *Cluster) EveryWeek(ctx context.Context, taskId string, week time.Weekda
 		Second:  second,
 	}
 
-	return c.addJob(ctx, taskId, jobData, callback, extendData)
+	return c.addJob(ctx, jobData, callback, extendData)
 }
 
 // 每天执行一次
@@ -292,13 +294,14 @@ func (c *Cluster) EveryDay(ctx context.Context, taskId string, hour int, minute 
 
 	jobData := JobData{
 		JobType: JobTypeEveryDay,
+		TaskId:  taskId,
 		// CreateTime: nowTime,
 		Hour:   hour,
 		Minute: minute,
 		Second: second,
 	}
 
-	return c.addJob(ctx, taskId, jobData, callback, extendData)
+	return c.addJob(ctx, jobData, callback, extendData)
 }
 
 // 每小时执行一次
@@ -307,12 +310,13 @@ func (c *Cluster) EveryHour(ctx context.Context, taskId string, minute int, seco
 
 	jobData := JobData{
 		JobType: JobTypeEveryHour,
+		TaskId:  taskId,
 		// CreateTime: nowTime,
 		Minute: minute,
 		Second: second,
 	}
 
-	return c.addJob(ctx, taskId, jobData, callback, extendData)
+	return c.addJob(ctx, jobData, callback, extendData)
 }
 
 // 每分钟执行一次
@@ -321,11 +325,12 @@ func (c *Cluster) EveryMinute(ctx context.Context, taskId string, second int, ca
 
 	jobData := JobData{
 		JobType: JobTypeEveryMinute,
+		TaskId:  taskId,
 		// CreateTime: nowTime,
 		Second: second,
 	}
 
-	return c.addJob(ctx, taskId, jobData, callback, extendData)
+	return c.addJob(ctx, jobData, callback, extendData)
 }
 
 // 特定时间间隔
@@ -342,11 +347,12 @@ func (c *Cluster) EverySpace(ctx context.Context, taskId string, spaceTime time.
 
 	jobData := JobData{
 		JobType:      JobTypeInterval,
+		TaskId:       taskId,
 		BaseTime:     zeroTime, // 默认当天的零点
 		IntervalTime: spaceTime,
 	}
 
-	return c.addJob(ctx, taskId, jobData, callback, extendData)
+	return c.addJob(ctx, jobData, callback, extendData)
 }
 
 // 定时任务
@@ -379,12 +385,13 @@ func (l *Cluster) Cron(ctx context.Context, taskId string, cronExpression string
 
 	jobData := JobData{
 		JobType:        JobTypeCron,
+		TaskId:         taskId,
 		BaseTime:       zeroTime, // 默认当天的零点
 		CronExpression: cronExpression,
 		CronSchedule:   sche,
 	}
 
-	return l.addJob(ctx, taskId, jobData, callback, extendData)
+	return l.addJob(ctx, jobData, callback, extendData)
 }
 
 // 统一添加任务
@@ -394,11 +401,11 @@ func (l *Cluster) Cron(ctx context.Context, taskId string, cronExpression string
 // @param callback callback 回调函数
 // @param extendData interface{} 扩展数据
 // @return error
-func (l *Cluster) addJob(ctx context.Context, taskId string, jobData JobData, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) error {
+func (l *Cluster) addJob(ctx context.Context, jobData JobData, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) error {
 	// 判断是否重复
-	_, ok := l.workerList.Load(taskId)
+	_, ok := l.workerList.Load(jobData.TaskId)
 	if ok {
-		l.logger.Errorf(ctx, "Cluster addJob taskId exits:%s", taskId)
+		l.logger.Errorf(ctx, "Cluster addJob taskId exits:%s", jobData.TaskId)
 		return ErrTaskIdExists
 	}
 
@@ -412,13 +419,13 @@ func (l *Cluster) addJob(ctx context.Context, taskId string, jobData JobData, ca
 	t := timerStr{
 		Callback:   callback,
 		ExtendData: extendData,
-		TaskId:     taskId,
+		TaskId:     jobData.TaskId,
 		JobData:    &jobData,
 	}
 
-	l.workerList.Store(taskId, t)
+	l.workerList.Store(jobData.TaskId, t)
 
-	l.logger.Infof(ctx, "Cluster addJob taskId:%s", taskId)
+	l.logger.Infof(ctx, "Cluster addJob taskId:%s", jobData.TaskId)
 
 	return nil
 }

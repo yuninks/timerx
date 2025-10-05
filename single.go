@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/robfig/cron/v3"
 	"github.com/yuninks/timerx/logger"
 )
 
@@ -31,6 +32,7 @@ type Single struct {
 	stopChan    chan struct{}
 	hasRun      sync.Map
 	timeout     time.Duration
+	cronParser  *cron.Parser // cron表达式解析器
 }
 
 // 定时器类
@@ -41,13 +43,14 @@ func InitSingle(ctx context.Context, opts ...Option) *Single {
 	ctx, cancel := context.WithCancel(ctx)
 
 	sin := &Single{
-		ctx:      ctx,
-		cancel:   cancel,
-		logger:   op.logger,
-		location: op.location,
-		nextTime: time.Now(),
-		stopChan: make(chan struct{}),
-		timeout:  op.timeout,
+		ctx:        ctx,
+		cancel:     cancel,
+		logger:     op.logger,
+		location:   op.location,
+		nextTime:   time.Now(),
+		stopChan:   make(chan struct{}),
+		timeout:    op.timeout,
+		cronParser: op.cronParser,
 	}
 
 	sin.startDaemon()
@@ -268,6 +271,36 @@ func (c *Single) EverySpace(ctx context.Context, taskId string, spaceTime time.D
 	}
 
 	return c.addJob(ctx, jobData, callback, extendData)
+}
+
+func (l *Single) Cron(ctx context.Context, taskId string, cronExpression string, callback func(ctx context.Context, extendData any) error, extendData any, opt ...Option) (int64, error) {
+	nowTime := time.Now().In(l.location)
+	// 获取当天的零点时间
+	zeroTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), 0, 0, 0, 0, nowTime.Location())
+
+	options := Options{}
+	for _, o := range opt {
+		o(&options)
+	}
+	cronParser := l.cronParser
+	if options.cronParser != nil {
+		cronParser = options.cronParser
+	}
+
+	sche, err := GetCronSche(cronExpression, cronParser)
+	if err != nil {
+		l.logger.Errorf(ctx, "timer Single Cron cronExpression error:%s", err.Error())
+		return 0, err
+	}
+
+	jobData := JobData{
+		JobType:        JobTypeCron,
+		TaskId:         taskId,
+		BaseTime:       zeroTime, // 默认当天的零点
+		CronExpression: cronExpression,
+		CronSchedule:   sche,
+	}
+	return l.addJob(ctx, jobData, callback, extendData)
 }
 
 // 间隔定时器

@@ -169,9 +169,9 @@ func cluster() {
 	fmt.Println(err)
 
 	// 默认秒级表达式
-	err = cluster.Cron(ctx, "test_cron1", "*/5 * * * * ?", aa, "这是cron任务1")
+	err = cluster.Cron(ctx, "test_cron1", "*/5 * * * * ?", aa, "这是cron任务1", timerx.WithCronParserSecond())
 	fmt.Println(err)
-	err = cluster.Cron(ctx, "test_cron2", "0/5 * * * * ?", aa, "这是cron任务2")
+	err = cluster.Cron(ctx, "test_cron2", "0/5 * * * * ?", aa, "这是cron任务2", timerx.WithCronParserSecond())
 	fmt.Println("这是cron任务2:", err)
 	// 自定义解析器
 	err = cluster.Cron(ctx, "test_cron3", "@every 2s", aa, "这是cron任务3", timerx.WithCronParserOption(cron.Descriptor))
@@ -179,6 +179,9 @@ func cluster() {
 	// Linux标准解析器
 	err = cluster.Cron(ctx, "test_cron4", "*/5 * * * *", aa, "这是cron任务4", timerx.WithCronParserLinux())
 	fmt.Println("这是cron任务4:", err)
+	// 仅符号解析器
+	err = cluster.Cron(ctx, "test_cron5", "@every 5s", aa, "这是cron任务5", timerx.WithCronParserDescriptor())
+	fmt.Println("这是cron任务5:", err)
 }
 
 func worker() {
