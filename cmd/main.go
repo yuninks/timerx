@@ -27,12 +27,28 @@ func main() {
 
 	// re()
 	// d()
-	cluster()
+	// cluster()
 	// once()
+	single()
 	// prioritys()
 
 	select {}
 
+}
+
+func single() error {
+
+	ctx := context.Background()
+
+	ops := []timerx.Option{
+		timerx.WithCronParserSecond(),
+	}
+
+	single := timerx.InitSingle(ctx, ops...)
+
+	single.Cron(ctx, "test_cron1", "*/5 * * * * ?", callback, "这是cron任务1", timerx.WithCronParserSecond())
+
+	return nil
 }
 
 func prioritys() {
@@ -144,43 +160,43 @@ func cluster() {
 	// _ = log
 
 	cluster, _ := timerx.InitCluster(ctx, client, "test2", timerx.WithPriority(104))
-	err := cluster.EverySpace(ctx, "test_space1", 1*time.Second, aa, "这是秒任务1")
+	err := cluster.EverySpace(ctx, "test_space1", 1*time.Second, callback, "这是秒任务1")
 	fmt.Println(err)
-	err = cluster.EverySpace(ctx, "test_space2", 2*time.Second, aa, "这是秒任务2")
+	err = cluster.EverySpace(ctx, "test_space2", 2*time.Second, callback, "这是秒任务2")
 	fmt.Println(err)
-	err = cluster.EverySpace(ctx, "test_space3", 5*time.Second, aa, "这是秒任务3")
-	fmt.Println(err)
-
-	err = cluster.EveryMinute(ctx, "test_min1", 15, aa, "这是分钟任务1")
-	fmt.Println(err)
-	err = cluster.EveryMinute(ctx, "test_min2", 30, aa, "这是分钟任务2")
+	err = cluster.EverySpace(ctx, "test_space3", 5*time.Second, callback, "这是秒任务3")
 	fmt.Println(err)
 
-	err = cluster.EveryHour(ctx, "test_hour1", 30, 0, aa, "这是小时任务1")
+	err = cluster.EveryMinute(ctx, "test_min1", 15, callback, "这是分钟任务1")
 	fmt.Println(err)
-	err = cluster.EveryHour(ctx, "test_hour2", 30, 15, aa, "这是小时任务2")
+	err = cluster.EveryMinute(ctx, "test_min2", 30, callback, "这是分钟任务2")
 	fmt.Println(err)
 
-	err = cluster.EveryDay(ctx, "test_day1", 5, 0, 0, aa, "这是天任务1")
+	err = cluster.EveryHour(ctx, "test_hour1", 30, 0, callback, "这是小时任务1")
 	fmt.Println(err)
-	err = cluster.EveryDay(ctx, "test_day2", 9, 20, 0, aa, "这是天任务2")
+	err = cluster.EveryHour(ctx, "test_hour2", 30, 15, callback, "这是小时任务2")
 	fmt.Println(err)
-	err = cluster.EveryDay(ctx, "test_day3", 10, 30, 30, aa, "这是天任务3")
+
+	err = cluster.EveryDay(ctx, "test_day1", 5, 0, 0, callback, "这是天任务1")
+	fmt.Println(err)
+	err = cluster.EveryDay(ctx, "test_day2", 9, 20, 0, callback, "这是天任务2")
+	fmt.Println(err)
+	err = cluster.EveryDay(ctx, "test_day3", 10, 30, 30, callback, "这是天任务3")
 	fmt.Println(err)
 
 	// 默认秒级表达式
-	err = cluster.Cron(ctx, "test_cron1", "*/5 * * * * ?", aa, "这是cron任务1", timerx.WithCronParserSecond())
+	err = cluster.Cron(ctx, "test_cron1", "*/5 * * * * ?", callback, "这是cron任务1", timerx.WithCronParserSecond())
 	fmt.Println(err)
-	err = cluster.Cron(ctx, "test_cron2", "0/5 * * * * ?", aa, "这是cron任务2", timerx.WithCronParserSecond())
+	err = cluster.Cron(ctx, "test_cron2", "0/5 * * * * ?", callback, "这是cron任务2", timerx.WithCronParserSecond())
 	fmt.Println("这是cron任务2:", err)
 	// 自定义解析器
-	err = cluster.Cron(ctx, "test_cron3", "@every 2s", aa, "这是cron任务3", timerx.WithCronParserOption(cron.Descriptor))
+	err = cluster.Cron(ctx, "test_cron3", "@every 2s", callback, "这是cron任务3", timerx.WithCronParserOption(cron.Descriptor))
 	fmt.Println("这是cron任务3:", err)
 	// Linux标准解析器
-	err = cluster.Cron(ctx, "test_cron4", "*/5 * * * *", aa, "这是cron任务4", timerx.WithCronParserLinux())
+	err = cluster.Cron(ctx, "test_cron4", "*/5 * * * *", callback, "这是cron任务4", timerx.WithCronParserLinux())
 	fmt.Println("这是cron任务4:", err)
 	// 仅符号解析器
-	err = cluster.Cron(ctx, "test_cron5", "@every 5s", aa, "这是cron任务5", timerx.WithCronParserDescriptor())
+	err = cluster.Cron(ctx, "test_cron5", "@every 5s", callback, "这是cron任务5", timerx.WithCronParserDescriptor())
 	fmt.Println("这是cron任务5:", err)
 }
 
@@ -224,17 +240,17 @@ func re() {
 
 	ctx := context.Background()
 	cl, _ := timerx.InitCluster(ctx, client, "kkkk")
-	cl.EverySpace(ctx, "test1", 1*time.Millisecond, aa, "data")
-	cl.EverySpace(ctx, "test2", 1*time.Millisecond, aa, "data")
-	cl.EverySpace(ctx, "test3", 1*time.Millisecond, aa, "data")
-	cl.EverySpace(ctx, "test4", 1*time.Millisecond, aa, "data")
-	cl.EverySpace(ctx, "test5", 1*time.Millisecond, aa, "data")
-	cl.EverySpace(ctx, "test6", 1*time.Millisecond, aa, "data")
+	cl.EverySpace(ctx, "test1", 1*time.Millisecond, callback, "data")
+	cl.EverySpace(ctx, "test2", 1*time.Millisecond, callback, "data")
+	cl.EverySpace(ctx, "test3", 1*time.Millisecond, callback, "data")
+	cl.EverySpace(ctx, "test4", 1*time.Millisecond, callback, "data")
+	cl.EverySpace(ctx, "test5", 1*time.Millisecond, callback, "data")
+	cl.EverySpace(ctx, "test6", 1*time.Millisecond, callback, "data")
 
 	select {}
 }
 
-func aa(ctx context.Context, data interface{}) error {
+func callback(ctx context.Context, data interface{}) error {
 
 	fmt.Println("-执行时间:", data, time.Now().Format("2006-01-02 15:04:05"))
 	// fmt.Println(data)

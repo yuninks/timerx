@@ -81,6 +81,9 @@ func validateJobData(job JobData) error {
 		if job.CronExpression == "" {
 			return ErrCronExpression
 		}
+		if job.CronSchedule == nil {
+			return ErrCronParser
+		}
 		_, err := calculateNextCronTime(time.Now(), job)
 		if err != nil {
 			return err
@@ -232,6 +235,9 @@ func calculateNextMinuteTime(t time.Time, job JobData) (*time.Time, error) {
 func calculateNextCronTime(t time.Time, job JobData) (*time.Time, error) {
 	if job.CronExpression == "" {
 		return nil, ErrCronExpression
+	}
+	if job.CronSchedule == nil {
+		return nil, ErrCronParser
 	}
 
 	s := *job.CronSchedule

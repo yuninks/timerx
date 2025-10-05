@@ -5,12 +5,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestGetNextTime(t *testing.T) {
 
 	tt := time.Date(2025, 10, 16, 10, 30, 5, 0, time.Local)
+
+	cronExpression := "0 0 10 * * ?" // Every day at 10:00 AM
+	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	sche, err := GetCronSche(cronExpression, &parser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// ttt := (*sche).Next(tt)
+	// fmt.Println(ttt.Format("2006-01-02 15:04:05"))
 
 	// Test cases
 	tests := []struct {
@@ -80,7 +90,7 @@ func TestGetNextTime(t *testing.T) {
 				BaseTime:     tt,
 				IntervalTime: 1 * time.Hour,
 			},
-			expectedTime: time.Date(2025, 10, 16, 12, 00, 0, 0, time.Local), // Assuming current date is March 7, 2022, 10:30 AM
+			expectedTime:  time.Date(2025, 10, 16, 12, 00, 0, 0, time.Local), // Assuming current date is March 7, 2022, 10:30 AM
 			expectedError: nil,
 		},
 		{
@@ -102,6 +112,15 @@ func TestGetNextTime(t *testing.T) {
 			},
 			expectedTime:  tt.Add(1 * time.Second), // Assuming current date is March 7, 2022, 10:30 AM
 			expectedError: nil,
+		},
+		{
+			name: "Test JobTypeCron",
+			job: JobData{
+				JobType:        JobTypeCron,
+				CronExpression: cronExpression,
+				CronSchedule:   sche,
+			},
+			expectedTime: time.Date(2025, 10, 17, 10, 0, 0, 0, time.Local), // Assuming current date is March 7, 2022, 10:30 AM
 		},
 		{
 			name: "Test unknown JobType",
