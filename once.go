@@ -330,19 +330,23 @@ func (l *Once) parseRedisKey(key string) (OnceTaskType, string, error) {
 // @param uniTaskId string 任务唯一标识
 // @param delayTime time.Duration 延迟时间
 // @param attachData interface{} 附加数据
-func (l *Once) Save(ctx context.Context, taskType OnceTaskType, taskId string, delayTime time.Duration, attachData interface{}) error {
+func (l *Once) Save(ctx context.Context, taskType OnceTaskType, taskId string, delayTime time.Duration, attachData any) error {
 	execTime := time.Now().Add(delayTime)
 	return l.save(ctx, jobTypeOnce, taskType, taskId, []time.Time{execTime}, attachData, 0)
 }
 
 // 指定时间添加任务(覆盖)
-func (l *Once) SaveByTime(ctx context.Context, taskType OnceTaskType, taskId string, executeTime time.Time, attachData interface{}) error {
+func (l *Once) SaveByTime(ctx context.Context, taskType OnceTaskType, taskId string, executeTime time.Time, attachData any) error {
 	return l.save(ctx, jobTypeOnce, taskType, taskId, []time.Time{executeTime}, attachData, 0)
+}
+
+func (l *Once) SaveByList(ctx context.Context, taskType OnceTaskType, taskId string, executeTimes []time.Time, attachData any, runCount int) error {
+	return l.save(ctx, jobTypeList, taskType, taskId, executeTimes, attachData, runCount)
 }
 
 // 添加任务(覆盖)
 // 重复插入就代表覆盖
-func (w *Once) save(ctx context.Context, jobType jobType, taskType OnceTaskType, taskId string, taskTimes []time.Time, attachData interface{}, runCount int) error {
+func (w *Once) save(ctx context.Context, jobType jobType, taskType OnceTaskType, taskId string, taskTimes []time.Time, attachData any, runCount int) error {
 	if len(taskTimes) == 0 {
 		w.logger.Errorf(ctx, "delay time must be positive taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
 		return ErrExecuteTime
@@ -415,6 +419,11 @@ func (l *Once) CreateByTime(ctx context.Context, taskType OnceTaskType, taskId s
 	return l.create(ctx, jobTypeOnce, taskType, taskId, []time.Time{executeTime}, attachData, 0)
 }
 
+// 指定多个时间执行(不覆盖)
+func (l *Once) CreateByList(ctx context.Context, taskType OnceTaskType, taskId string, taskTimes []time.Time, attachData any) error {
+	return l.create(ctx, jobTypeList, taskType, taskId, taskTimes, attachData, 0)
+}
+
 func (l *Once) create(ctx context.Context, jobType jobType, taskType OnceTaskType, taskId string, taskTimes []time.Time, attachData any, runCount int) error {
 	if len(taskTimes) <= 0 {
 		l.logger.Errorf(ctx, "delay time must be positive taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
@@ -426,7 +435,7 @@ func (l *Once) create(ctx context.Context, jobType jobType, taskType OnceTaskTyp
 	score, err := l.redis.ZScore(l.ctx, l.zsetKey, redisKey).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return l.save(ctx, jobTypeOnce, taskType, taskId, taskTimes, attachData, runCount)
+			return l.save(ctx, jobType, taskType, taskId, taskTimes, attachData, runCount)
 		}
 		l.logger.Errorf(l.ctx, "redis.ZScore err:%v", err)
 		return err
@@ -436,7 +445,7 @@ func (l *Once) create(ctx context.Context, jobType jobType, taskType OnceTaskTyp
 		return ErrTaskExists
 	}
 
-	return l.save(ctx, jobTypeOnce, taskType, taskId, taskTimes, attachData, runCount)
+	return l.save(ctx, jobType, taskType, taskId, taskTimes, attachData, runCount)
 }
 
 // 删除任务
