@@ -33,4 +33,12 @@ var (
 	ErrCronExpression = errors.New("cron expression error")
 	// ErrCronParser 错误
 	ErrCronParser = errors.New("cron parser error")
+	// ExecuteTime 错误
+	ErrExecuteTime = errors.New("execute time error")
+	// RunCount 错误
+	ErrRunCount = errors.New("run count error")
+	// DelayTime 错误
+	ErrDelayTime = errors.New("delay time error")
+	// 任务已存在
+	ErrTaskExists = errors.New("task already exists")
 )

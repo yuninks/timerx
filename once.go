@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,7 +52,7 @@ type Once struct {
 	keySeparator   string        // 分割符
 	timeout        time.Duration // 任务执行超时时间
 
-	maxRetryCount int // 最大重试次数 0代表不限
+	maxRunCount int // 最大重试次数 0代表不限
 }
 
 type OnceWorkerResp struct {
@@ -74,10 +75,18 @@ type Callback interface {
 }
 
 type extendData struct {
-	Delay      time.Duration
-	Data       any
-	RetryCount int // 重试次数
+	TaskTimes []time.Time
+	Data      any
+	RunCount  int // 运行次数
+	JobType   jobType
 }
+
+type jobType string
+
+const (
+	jobTypeOnce = "once"
+	jobTypeList = "list"
+)
 
 // 初始化
 func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, call Callback, opts ...Option) (*Once, error) {
@@ -109,7 +118,7 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 		instanceId:       u.String(),
 		keySeparator:     "[:]",
 		timeout:          op.timeout,
-		maxRetryCount:    op.maxRetryCount,
+		maxRunCount:      op.maxRunCount,
 	}
 
 	// 初始化优先级
@@ -288,6 +297,12 @@ func (l *Once) executeTasks() {
 				continue
 			}
 
+			if len(keys) < 2 {
+				l.logger.Errorf(l.ctx, "Invalid task data: %v", keys)
+				// 数据异常，继续下一个
+				continue
+			}
+			// 处理任务
 			go l.processTask(keys[1])
 
 		}
@@ -316,45 +331,69 @@ func (l *Once) parseRedisKey(key string) (OnceTaskType, string, error) {
 // @param delayTime time.Duration 延迟时间
 // @param attachData interface{} 附加数据
 func (l *Once) Save(ctx context.Context, taskType OnceTaskType, taskId string, delayTime time.Duration, attachData interface{}) error {
-	return l.save(ctx, taskType, taskId, delayTime, attachData, 0)
+	execTime := time.Now().Add(delayTime)
+	return l.save(ctx, jobTypeOnce, taskType, taskId, []time.Time{execTime}, attachData, 0)
 }
 
 // 指定时间添加任务(覆盖)
 func (l *Once) SaveByTime(ctx context.Context, taskType OnceTaskType, taskId string, executeTime time.Time, attachData interface{}) error {
-	return l.save(ctx, taskType, taskId, time.Until(executeTime), attachData, 0)
+	return l.save(ctx, jobTypeOnce, taskType, taskId, []time.Time{executeTime}, attachData, 0)
 }
 
 // 添加任务(覆盖)
 // 重复插入就代表覆盖
-func (w *Once) save(ctx context.Context, taskType OnceTaskType, taskId string, delayTime time.Duration, attachData interface{}, retryCount int) error {
-	if delayTime <= 0 {
-		w.logger.Errorf(ctx, "delay time must be positive delayTime:%v taskType:%v taskId:%v attachData:%v retryCount:%v", delayTime, taskType, taskId, attachData, retryCount)
-		return fmt.Errorf("delay time must be positive")
+func (w *Once) save(ctx context.Context, jobType jobType, taskType OnceTaskType, taskId string, taskTimes []time.Time, attachData interface{}, runCount int) error {
+	if len(taskTimes) == 0 {
+		w.logger.Errorf(ctx, "delay time must be positive taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
+		return ErrExecuteTime
+	}
+
+	if jobType == jobTypeList && len(taskTimes) <= runCount {
+		w.logger.Errorf(ctx, "delay time must be positive taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
+		return ErrRunCount
+	}
+
+	// 根据时间从小到大排序
+	sort.Slice(taskTimes, func(i, j int) bool {
+		return taskTimes[i].Before(taskTimes[j])
+	})
+
+	latestTime := taskTimes[len(taskTimes)-1]
+	if latestTime.Before(time.Now()) {
+		w.logger.Errorf(ctx, "delay time must be positive taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
+		return ErrDelayTime
+	}
+
+	nextTime := taskTimes[0]
+	if jobType == jobTypeList {
+		nextTime = taskTimes[runCount]
 	}
 
 	redisKey := w.buildRedisKey(taskType, taskId)
-	executeTime := time.Now().Add(delayTime)
 
 	ed := extendData{
-		Delay:      delayTime,
-		Data:       attachData,
-		RetryCount: retryCount,
+		TaskTimes: taskTimes,
+		Data:      attachData,
+		RunCount:  runCount,
+		JobType:   jobType,
 	}
 	b, _ := json.Marshal(ed)
 
 	// 使用事务确保原子性
 	pipe := w.redis.TxPipeline()
 
-	dataExpire := delayTime + time.Minute*30
+	expiresTime := latestTime.Add(time.Minute * 30)
+
+	dataExpire := time.Until(expiresTime)
 
 	pipe.SetEx(w.ctx, w.keyPrefix+redisKey, b, dataExpire)
 	pipe.ZAdd(w.ctx, w.zsetKey, redis.Z{
-		Score:  float64(executeTime.UnixMilli()),
+		Score:  float64(nextTime.UnixMilli()),
 		Member: redisKey,
 	})
 	_, err := pipe.Exec(w.ctx)
 	if err != nil {
-		w.logger.Errorf(w.ctx, "save task failed:%v taskType:%v taskId:%v attachData:%v retryCount:%v", err, taskType, taskId, attachData, retryCount)
+		w.logger.Errorf(w.ctx, "save task failed:%v taskType:%v taskId:%v attachData:%v retryCount:%v", err, taskType, taskId, attachData, runCount)
 		return err
 	}
 
@@ -363,18 +402,23 @@ func (w *Once) save(ctx context.Context, taskType OnceTaskType, taskId string, d
 
 // 添加任务(不覆盖)
 func (l *Once) Create(ctx context.Context, taskType OnceTaskType, taskId string, delayTime time.Duration, attachData any) error {
-	return l.create(ctx, taskType, taskId, delayTime, attachData, 0)
+	if delayTime <= 0 {
+		l.logger.Errorf(ctx, "delay time must be positive taskType:%v taskId:%v attachData:%v", taskType, taskId, attachData)
+		return ErrDelayTime
+	}
+	execTime := time.Now().Add(delayTime)
+	return l.create(ctx, jobTypeOnce, taskType, taskId, []time.Time{execTime}, attachData, 0)
 }
 
 // 指定时间执行(不覆盖)
 func (l *Once) CreateByTime(ctx context.Context, taskType OnceTaskType, taskId string, executeTime time.Time, attachData any) error {
-	delay := time.Until(executeTime)
-	return l.create(ctx, taskType, taskId, delay, attachData, 0)
+	return l.create(ctx, jobTypeOnce, taskType, taskId, []time.Time{executeTime}, attachData, 0)
 }
 
-func (l *Once) create(ctx context.Context, taskType OnceTaskType, taskId string, delayTime time.Duration, attachData any, retryCount int) error {
-	if delayTime <= 0 {
-		return fmt.Errorf("delay time must be positive")
+func (l *Once) create(ctx context.Context, jobType jobType, taskType OnceTaskType, taskId string, taskTimes []time.Time, attachData any, runCount int) error {
+	if len(taskTimes) <= 0 {
+		l.logger.Errorf(ctx, "delay time must be positive taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
+		return ErrExecuteTime
 	}
 
 	redisKey := l.buildRedisKey(taskType, taskId)
@@ -382,16 +426,17 @@ func (l *Once) create(ctx context.Context, taskType OnceTaskType, taskId string,
 	score, err := l.redis.ZScore(l.ctx, l.zsetKey, redisKey).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return l.Save(ctx, taskType, taskId, delayTime, attachData)
+			return l.save(ctx, jobTypeOnce, taskType, taskId, taskTimes, attachData, runCount)
 		}
 		l.logger.Errorf(l.ctx, "redis.ZScore err:%v", err)
 		return err
 	}
 	if score > 0 {
-		return fmt.Errorf("task already exists")
+		l.logger.Errorf(l.ctx, "task exists taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
+		return ErrTaskExists
 	}
 
-	return l.save(ctx, taskType, taskId, delayTime, attachData, retryCount)
+	return l.save(ctx, jobTypeOnce, taskType, taskId, taskTimes, attachData, runCount)
 }
 
 // 删除任务
@@ -523,23 +568,24 @@ func (l *Once) processTask(key string) {
 func (l *Once) handleRetry(ctx context.Context, taskType OnceTaskType, taskId string,
 	ed *extendData, resp *OnceWorkerResp) error {
 	// 限制重试次数
-	ed.RetryCount++
-	if l.maxRetryCount > 0 && ed.RetryCount > l.maxRetryCount {
-		l.logger.Infof(ctx, "handleRetry task exceeded retry limit: %s %s %d", taskType, taskId, l.maxRetryCount)
+	ed.RunCount++
+	if l.maxRunCount > 0 && ed.RunCount > l.maxRunCount {
+		l.logger.Infof(ctx, "handleRetry task exceeded retry limit: %s %s %d", taskType, taskId, l.maxRunCount)
 		return nil
 	}
 
 	// 更新延迟时间
-	if resp.DelayTime > 0 {
-		ed.Delay = resp.DelayTime
+	if ed.JobType == jobTypeOnce {
+		ed.TaskTimes = []time.Time{time.Now().Add(resp.DelayTime)}
 	}
+
 	if resp.AttachData != nil {
 		ed.Data = resp.AttachData
 	}
 
 	l.logger.Infof(ctx, "handleRetry retrying task: %s:%s, retry count: %d",
-		taskType, taskId, ed.RetryCount)
+		taskType, taskId, ed.RunCount)
 
 	// 不覆盖的新建
-	return l.create(ctx, taskType, taskId, ed.Delay, ed.Data, ed.RetryCount)
+	return l.create(ctx, ed.JobType, taskType, taskId, ed.TaskTimes, ed.Data, ed.RunCount)
 }

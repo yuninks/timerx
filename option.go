@@ -8,14 +8,14 @@ import (
 )
 
 type Options struct {
-	logger        logger.Logger
-	location      *time.Location
-	timeout       time.Duration // 任务最长执行时间
-	usePriority   bool
-	priorityVal   int64
-	batchSize     int
-	maxRetryCount int
-	cronParser    *cron.Parser // cron表达式解析器
+	logger      logger.Logger
+	location    *time.Location
+	timeout     time.Duration // 任务最长执行时间
+	usePriority bool
+	priorityVal int64
+	batchSize   int
+	maxRunCount int          // 单个任务最大运行次数 0 代表不限
+	cronParser  *cron.Parser // cron表达式解析器
 }
 
 func defaultOptions() Options {
@@ -24,21 +24,31 @@ func defaultOptions() Options {
 	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 
 	return Options{
-		logger:        logger.NewLogger(),
-		location:      time.Local,
-		timeout:       time.Hour, //
-		usePriority:   false,
-		priorityVal:   0,
-		batchSize:     100,
-		maxRetryCount: 0,
-		cronParser:    &parser,
+		logger:      logger.NewLogger(),
+		location:    time.Local,
+		timeout:     time.Hour, //
+		usePriority: false,
+		priorityVal: 0,
+		batchSize:   100,
+		maxRunCount: 0,
+		cronParser:  &parser,
 	}
 }
 
 type Option func(*Options)
 
+// 返回带默认值的配置
 func newOptions(opts ...Option) Options {
 	o := defaultOptions()
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return o
+}
+
+// 返回空的配置
+func newEmptyOptions(opts ...Option) Options {
+	o := Options{}
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -88,7 +98,7 @@ func WithMaxRetryCount(count int) Option {
 		if count < 0 {
 			count = 0
 		}
-		o.maxRetryCount = count
+		o.maxRunCount = count
 	}
 }
 
@@ -144,4 +154,3 @@ func WithCronParserDescriptor() Option {
 		o.cronParser = &parser
 	}
 }
-

@@ -370,10 +370,7 @@ func (l *Cluster) Cron(ctx context.Context, taskId string, cronExpression string
 	// 获取当天的零点时间
 	zeroTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), 0, 0, 0, 0, nowTime.Location())
 
-	options := Options{}
-	for _, o := range opt {
-		o(&options)
-	}
+	options := newEmptyOptions(opt...)
 	cronParser := l.cronParser
 	if options.cronParser != nil {
 		cronParser = options.cronParser
@@ -544,6 +541,8 @@ func (c *Cluster) executeTasks() {
 			}
 
 			if len(taskID) < 2 {
+				c.logger.Errorf(c.ctx, "Invalid BLPop result: %v", taskID)
+				// 数据异常，继续下一个
 				continue
 			}
 

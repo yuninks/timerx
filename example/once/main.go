@@ -27,19 +27,46 @@ func main() {
 		panic(err)
 	}
 
+	ch := make(chan ChanStatus, 1000)
+
+	go func() {
+		for a := 0; a < 100; a++ {
+			go func(a int) {
+				for status := range ch {
+					// fmt.Println("协程", a, "处理任务", status)
+					// time.Sleep(10 * time.Millisecond) // 模拟处理时间
+					err = once.SaveByTime(ctx, OnceTaskTypeNormal, fmt.Sprintf("task_%d_%d", status.I, status.J), status.T, fmt.Sprintf("任务数据_%d_%d 预期时间%s", status.I, status.J, status.T.Format("2006-01-02 15:04:05")))
+					if err != nil {
+						fmt.Println("保存任务失败:", err)
+					}
+				}
+			}(a)
+		}
+	}()
+
 	go func() {
 		// 一千万任务，每个任务间隔1秒
 
-		for i := 0; i < 10000000; i++ {
+		for i := 0; i < 100; i++ {
 			runTime := t.Add(time.Duration(i) * time.Second)
-			for j := 0; j < 50000; j++ {
-				once.CreateByTime(ctx, OnceTaskTypeNormal, fmt.Sprintf("task_%d_%d", i, j), runTime, fmt.Sprintf("任务数据_%d_%d 预期时间%s", i, j, runTime.Format("2006-01-02 15:04:05")))
+			for j := 0; j < 100; j++ {
+				ch <- ChanStatus{
+					I: i,
+					J: j,
+					T: runTime,
+				}
 			}
 		}
 	}()
 
 	select {}
 
+}
+
+type ChanStatus struct {
+	I int
+	J int
+	T time.Time
 }
 
 func getRedis() *redis.Client {
