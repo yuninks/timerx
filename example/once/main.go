@@ -30,7 +30,7 @@ func main() {
 	ch := make(chan ChanStatus, 1000)
 
 	go func() {
-		for a := 0; a < 100; a++ {
+		for a := 0; a < 10; a++ {
 			go func(a int) {
 				for status := range ch {
 					// fmt.Println("协程", a, "处理任务", status)
@@ -47,9 +47,9 @@ func main() {
 	go func() {
 		// 一千万任务，每个任务间隔1秒
 
-		for i := 0; i < 100; i++ {
+		for i := 0; i < 10; i++ {
 			runTime := t.Add(time.Duration(i) * time.Second)
-			for j := 0; j < 100; j++ {
+			for j := 0; j < 10; j++ {
 				ch <- ChanStatus{
 					I: i,
 					J: j,

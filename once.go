@@ -88,6 +88,13 @@ const (
 	jobTypeList = "list"
 )
 
+type createSource string
+
+const (
+	createSourceDefault = "default"
+	createSourceRetry   = "retry"
+)
+
 // 初始化
 func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, call Callback, opts ...Option) (*Once, error) {
 	op := newOptions(opts...)
@@ -411,26 +418,40 @@ func (l *Once) Create(ctx context.Context, taskType OnceTaskType, taskId string,
 		return ErrDelayTime
 	}
 	execTime := time.Now().Add(delayTime)
-	return l.create(ctx, jobTypeOnce, taskType, taskId, []time.Time{execTime}, attachData, 0)
+	return l.create(ctx, createSourceDefault, jobTypeOnce, taskType, taskId, []time.Time{execTime}, attachData, 0)
 }
 
 // 指定时间执行(不覆盖)
 func (l *Once) CreateByTime(ctx context.Context, taskType OnceTaskType, taskId string, executeTime time.Time, attachData any) error {
-	return l.create(ctx, jobTypeOnce, taskType, taskId, []time.Time{executeTime}, attachData, 0)
+	return l.create(ctx, createSourceDefault, jobTypeOnce, taskType, taskId, []time.Time{executeTime}, attachData, 0)
 }
 
 // 指定多个时间执行(不覆盖)
 func (l *Once) CreateByList(ctx context.Context, taskType OnceTaskType, taskId string, taskTimes []time.Time, attachData any) error {
-	return l.create(ctx, jobTypeList, taskType, taskId, taskTimes, attachData, 0)
+	return l.create(ctx, createSourceDefault, jobTypeList, taskType, taskId, taskTimes, attachData, 0)
 }
 
-func (l *Once) create(ctx context.Context, jobType jobType, taskType OnceTaskType, taskId string, taskTimes []time.Time, attachData any, runCount int) error {
+func (l *Once) create(ctx context.Context, source createSource, jobType jobType, taskType OnceTaskType, taskId string, taskTimes []time.Time, attachData any, runCount int) error {
 	if len(taskTimes) <= 0 {
 		l.logger.Errorf(ctx, "delay time must be positive taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
 		return ErrExecuteTime
 	}
 
 	redisKey := l.buildRedisKey(taskType, taskId)
+
+	if source != createSourceRetry {
+		// 这里加一个全局锁 从Retry来的不需要 因为已经加锁了
+		lock, err := lockx.NewGlobalLock(ctx, l.redis, l.globalLockPrefix+redisKey)
+		if err != nil {
+			l.logger.Errorf(ctx, "processTask timer:获取锁失败:%s", taskId)
+			return err
+		}
+		if b, err := lock.Lock(); !b {
+			l.logger.Errorf(ctx, "processTask timer:获取锁失败:%s %+v", taskId, err)
+			return err
+		}
+		defer lock.Unlock()
+	}
 
 	score, err := l.redis.ZScore(l.ctx, l.zsetKey, redisKey).Result()
 	if err != nil {
@@ -596,5 +617,5 @@ func (l *Once) handleRetry(ctx context.Context, taskType OnceTaskType, taskId st
 		taskType, taskId, ed.RunCount)
 
 	// 不覆盖的新建
-	return l.create(ctx, ed.JobType, taskType, taskId, ed.TaskTimes, ed.Data, ed.RunCount)
+	return l.create(ctx, createSourceRetry, ed.JobType, taskType, taskId, ed.TaskTimes, ed.Data, ed.RunCount)
 }
