@@ -121,8 +121,8 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 		keySeparator:     "[:]",
 		timeout:          op.timeout,
 		maxRunCount:      op.maxRunCount,
-		workerChan:       make(chan struct{}, op.maxRunCount),
-		maxWorkers:       op.maxRunCount,
+		workerChan:       make(chan struct{}, op.maxWorkers),
+		maxWorkers:       op.maxWorkers,
 	}
 
 	// 初始化优先级
@@ -289,7 +289,8 @@ func (l *Once) executeTasks() {
 			return
 		case <-l.ctx.Done():
 			return
-		case <-l.workerChan:
+		case l.workerChan <- struct{}{}:
+
 			keys, err := l.redis.BLPop(l.ctx, time.Second*10, l.listKey).Result()
 			if err != nil {
 				if err != redis.Nil {

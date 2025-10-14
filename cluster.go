@@ -529,7 +529,7 @@ func (c *Cluster) executeTasks() {
 			return
 		case <-c.ctx.Done():
 			return
-		case <-c.workerChan:
+		case c.workerChan <- struct{}{}:
 			if c.usePriority && !c.priority.IsLatest(c.ctx) {
 				time.Sleep(5 * time.Second)
 				continue
