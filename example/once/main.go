@@ -20,12 +20,90 @@ const (
 func main() {
 
 	ctx := context.Background()
-	t := time.Now()
+
 	client := getRedis()
 	once, err := timerx.InitOnce(ctx, client, "once_test", &OnceWorker{}, timerx.WithBatchSize(1000))
 	if err != nil {
 		panic(err)
 	}
+
+	// intervalSaveTime(ctx, once)
+	// intervalSave(ctx, once)
+	// intervalcreateTask(ctx, once)
+	intervalCreateTime(ctx, once)
+	// benchmarkJob(ctx, once)
+
+	select {}
+
+}
+
+// 指定时间测试
+func intervalSaveTime(ctx context.Context, once *timerx.Once) {
+
+	beginTime := time.Now()
+
+	for i := 1; i < 100; i++ {
+
+		execTime := beginTime.Add(time.Second * time.Duration(i))
+
+		err := once.SaveByTime(ctx, timerx.OnceTaskType("intervalSaveTime"), fmt.Sprintf("intervalSaveTime_task_%d", i), execTime, fmt.Sprintf("任务数据_%d 预期时间%s", i, execTime.Format("2006-01-02 15:04:05")))
+		fmt.Println(err)
+	}
+
+}
+
+// 间隔测试
+func intervalSave(ctx context.Context, once *timerx.Once) {
+
+	beginTime := time.Now()
+
+	for i := 1; i < 100; i++ {
+
+		execTime := beginTime.Add(time.Second * time.Duration(i))
+
+		err := once.Save(ctx, timerx.OnceTaskType("intervalSaveTime"), fmt.Sprintf("intervalSaveTime_task_%d", i), time.Until(execTime), fmt.Sprintf("任务数据_%d 预期时间%s", i, execTime.Format("2006-01-02 15:04:05")))
+		fmt.Println(err)
+	}
+
+}
+
+// 创建间隔测试
+func intervalcreateTask(ctx context.Context, once *timerx.Once) {
+
+	beginTime := time.Now()
+
+	for i := 1; i < 100; i++ {
+
+		execTime := beginTime.Add(time.Second * time.Duration(i))
+
+		err := once.Create(ctx, timerx.OnceTaskType("intervalSaveTime"), fmt.Sprintf("intervalSaveTime_task_%d", i), time.Until(execTime), fmt.Sprintf("任务数据A_%d 预期时间%s", i, execTime.Format("2006-01-02 15:04:05")))
+		fmt.Println(err)
+		err = once.Create(ctx, timerx.OnceTaskType("intervalSaveTime"), fmt.Sprintf("intervalSaveTime_task_%d", i), time.Until(execTime), fmt.Sprintf("任务数据B_%d 预期时间%s", i, execTime.Format("2006-01-02 15:04:05")))
+		fmt.Println(err)
+	}
+
+}
+
+func intervalCreateTime(ctx context.Context, once *timerx.Once) {
+
+	beginTime := time.Now()
+
+	for i := 1; i < 100; i++ {
+
+		execTime := beginTime.Add(time.Second * time.Duration(i))
+
+		err := once.CreateByTime(ctx, timerx.OnceTaskType("intervalSaveTime"), fmt.Sprintf("intervalSaveTime_task_%d", i), execTime, fmt.Sprintf("任务数据A_%d 预期时间%s", i, execTime.Format("2006-01-02 15:04:05")))
+		fmt.Println(err)
+		err = once.CreateByTime(ctx, timerx.OnceTaskType("intervalSaveTime"), fmt.Sprintf("intervalSaveTime_task_%d", i), execTime, fmt.Sprintf("任务数据B_%d 预期时间%s", i, execTime.Format("2006-01-02 15:04:05")))
+		fmt.Println(err)
+	}
+
+}
+
+// 压力测试
+func benchmarkJob(ctx context.Context, once *timerx.Once) {
+
+	t := time.Now()
 
 	ch := make(chan ChanStatus, 1000)
 
@@ -35,7 +113,7 @@ func main() {
 				for status := range ch {
 					// fmt.Println("协程", a, "处理任务", status)
 					// time.Sleep(10 * time.Millisecond) // 模拟处理时间
-					err = once.SaveByTime(ctx, OnceTaskTypeNormal, fmt.Sprintf("task_%d_%d", status.I, status.J), status.T, fmt.Sprintf("任务数据_%d_%d 预期时间%s", status.I, status.J, status.T.Format("2006-01-02 15:04:05")))
+					err := once.SaveByTime(ctx, OnceTaskTypeNormal, fmt.Sprintf("task_%d_%d", status.I, status.J), status.T, fmt.Sprintf("任务数据_%d_%d 预期时间%s", status.I, status.J, status.T.Format("2006-01-02 15:04:05")))
 					if err != nil {
 						fmt.Println("保存任务失败:", err)
 					}
@@ -58,9 +136,6 @@ func main() {
 			}
 		}
 	}()
-
-	select {}
-
 }
 
 type ChanStatus struct {
