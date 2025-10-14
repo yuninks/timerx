@@ -87,7 +87,7 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 		setKey:         "timer:cluster_setKey" + keyPrefix,         // 重入集合
 		priorityKey:    "timer:cluster_priorityKey" + keyPrefix,    // 全局优先级的key
 		executeInfoKey: "timer:cluster_executeInfoKey" + keyPrefix, // 执行情况的key 有序集合
-		usePriority:    op.usePriority,
+		usePriority:    false,
 		stopChan:       make(chan struct{}),
 		instanceId:     U.String(),
 		cronParser:     op.cronParser,
@@ -98,7 +98,18 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 
 	// 初始化优先级
 
-	if clu.usePriority {
+	if op.priorityType != priorityTypeNone {
+
+		clu.usePriority = true
+
+		if op.priorityType == priorityTypeVersion {
+			pVal, err := priority.PriorityByVersion(op.priorityVersion)
+			if err != nil {
+				clu.logger.Errorf(ctx, "PriorityByVersion version:%s err:%v", op.priorityVersion, err)
+				return nil, err
+			}
+			op.priorityVal = pVal
+		}
 
 		pri, err := priority.InitPriority(
 			ctx,

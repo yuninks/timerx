@@ -8,16 +8,25 @@ import (
 )
 
 type Options struct {
-	logger      logger.Logger
-	location    *time.Location
-	timeout     time.Duration // 任务最长执行时间
-	usePriority bool
-	priorityVal int64
-	batchSize   int
-	maxRunCount int          // 单个任务最大运行次数 0代表不限
-	maxWorkers  int          // 最大工作协程数
-	cronParser  *cron.Parser // cron表达式解析器
+	logger          logger.Logger
+	location        *time.Location
+	timeout         time.Duration // 任务最长执行时间
+	priorityType    priorityType  // 策略类型 0.不使用 1.优先级 2.版本
+	priorityVal     int64         // 策略优先级
+	priorityVersion string        // 策略版本的集
+	batchSize       int
+	maxRunCount     int          // 单个任务最大运行次数 0代表不限
+	maxWorkers      int          // 最大工作协程数
+	cronParser      *cron.Parser // cron表达式解析器
 }
+
+type priorityType int8
+
+const (
+	priorityTypeNone     priorityType = 0 // 不使用优先级
+	priorityTypePriority priorityType = 1
+	priorityTypeVersion  priorityType = 2 // 版本
+)
 
 func defaultOptions() Options {
 
@@ -25,15 +34,15 @@ func defaultOptions() Options {
 	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 
 	return Options{
-		logger:      logger.NewLogger(),
-		location:    time.Local,
-		timeout:     time.Hour, //
-		usePriority: false,
-		priorityVal: 0,
-		batchSize:   100,
-		maxRunCount: 0,
-		maxWorkers:  100,
-		cronParser:  &parser,
+		logger:       logger.NewLogger(),
+		location:     time.Local,
+		timeout:      time.Hour, //
+		priorityType: priorityTypeNone,
+		priorityVal:  0,
+		batchSize:    100,
+		maxRunCount:  0,
+		maxWorkers:   100,
+		cronParser:   &parser,
 	}
 }
 
@@ -81,8 +90,15 @@ func WithTimeout(d time.Duration) Option {
 // 设置优先级
 func WithPriority(priority int64) Option {
 	return func(o *Options) {
-		o.usePriority = true
+		o.priorityType = priorityTypePriority
 		o.priorityVal = priority
+	}
+}
+
+func WithPriorityByVersion(version string) Option {
+	return func(o *Options) {
+		o.priorityType = priorityTypeVersion
+		o.priorityVersion = version
 	}
 }
 

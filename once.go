@@ -111,7 +111,7 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 		listKey:          "timer:once_listkey" + keyPrefix,
 		executeInfoKey:   "timer:once_executeInfoKey" + keyPrefix,
 		globalLockPrefix: "timer:once_globalLockPrefix" + keyPrefix,
-		usePriority:      op.usePriority,
+		usePriority:      false,
 		redis:            re,
 		worker:           call,
 		keyPrefix:        keyPrefix,
@@ -126,7 +126,19 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 	}
 
 	// 初始化优先级
-	if wo.usePriority {
+	if op.priorityType != priorityTypeNone {
+
+		wo.usePriority = true
+
+		if op.priorityType == priorityTypeVersion {
+			pVal, err := priority.PriorityByVersion(op.priorityVersion)
+			if err != nil {
+				wo.logger.Errorf(ctx, "PriorityByVersion version:%s err:%v", op.priorityVersion, err)
+				return nil, err
+			}
+			op.priorityVal = pVal
+		}
+
 		pri, err := priority.InitPriority(
 			ctx,
 			re,
