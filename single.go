@@ -27,12 +27,12 @@ type Single struct {
 	nextTime    time.Time
 	nextTimeMux sync.RWMutex
 	wg          sync.WaitGroup
-	workerList  sync.Map
-	timerIndex  int64
-	stopChan    chan struct{}
-	hasRun      sync.Map
-	timeout     time.Duration
-	cronParser  *cron.Parser // cron表达式解析器
+	workerList  sync.Map      // 任务列表，key为taskId，value为worker
+	timerIndex  int64         // 任务索引，用于生成taskId
+	stopChan    chan struct{} // 停止信号
+	hasRun      sync.Map      // 记录已经执行的任务，key为taskId，value为执行时间
+	timeout     time.Duration // 单次任务超时时间
+	cronParser  *cron.Parser  // cron表达式解析器
 }
 
 // 定时器类

@@ -54,6 +54,8 @@ type Cluster struct {
 	cache      *cachex.Cache        // 本地缓存
 	cronParser *cron.Parser         // cron表达式解析器
 	batchSize  int                  // 批量获取任务的数量
+	workerChan chan struct{}        // worker
+	maxWorkers int                  // 最大worker数量
 }
 
 // 初始化定时器
@@ -90,6 +92,8 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 		instanceId:     U.String(),
 		cronParser:     op.cronParser,
 		batchSize:      op.batchSize,
+		workerChan:     make(chan struct{}, op.maxRunCount),
+		maxWorkers:     op.maxRunCount,
 	}
 
 	// 初始化优先级
@@ -519,12 +523,13 @@ func (c *Cluster) executeTasks() {
 	defer c.wg.Done()
 
 	for {
+
 		select {
 		case <-c.stopChan:
 			return
 		case <-c.ctx.Done():
 			return
-		default:
+		case <-c.workerChan:
 			if c.usePriority && !c.priority.IsLatest(c.ctx) {
 				time.Sleep(5 * time.Second)
 				continue
@@ -559,6 +564,10 @@ type ReJobData struct {
 
 // 执行任务
 func (l *Cluster) processTask(taskId string) {
+	defer func() {
+		<-l.workerChan
+	}()
+
 	begin := time.Now()
 
 	ctx, cancel := context.WithTimeout(l.ctx, l.timeout)

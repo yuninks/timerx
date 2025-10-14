@@ -14,7 +14,8 @@ type Options struct {
 	usePriority bool
 	priorityVal int64
 	batchSize   int
-	maxRunCount int          // 单个任务最大运行次数 0 代表不限
+	maxRunCount int          // 单个任务最大运行次数 0代表不限
+	maxWorkers  int          // 最大工作协程数
 	cronParser  *cron.Parser // cron表达式解析器
 }
 
@@ -31,6 +32,7 @@ func defaultOptions() Options {
 		priorityVal: 0,
 		batchSize:   100,
 		maxRunCount: 0,
+		maxWorkers:  100,
 		cronParser:  &parser,
 	}
 }
@@ -99,6 +101,15 @@ func WithMaxRetryCount(count int) Option {
 			count = 0
 		}
 		o.maxRunCount = count
+	}
+}
+
+func WithMaxWorkers(count int) Option {
+	return func(o *Options) {
+		if count < 0 {
+			count = 10
+		}
+		o.maxWorkers = count
 	}
 }
 

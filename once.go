@@ -52,7 +52,9 @@ type Once struct {
 	keySeparator   string        // 分割符
 	timeout        time.Duration // 任务执行超时时间
 
-	maxRunCount int // 最大重试次数 0代表不限
+	maxRunCount int           // 最大重试次数 0代表不限
+	workerChan  chan struct{} // worker
+	maxWorkers  int           // 最大worker数量
 }
 
 type OnceWorkerResp struct {
@@ -119,6 +121,8 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 		keySeparator:     "[:]",
 		timeout:          op.timeout,
 		maxRunCount:      op.maxRunCount,
+		workerChan:       make(chan struct{}, op.maxRunCount),
+		maxWorkers:       op.maxRunCount,
 	}
 
 	// 初始化优先级
@@ -285,8 +289,7 @@ func (l *Once) executeTasks() {
 			return
 		case <-l.ctx.Done():
 			return
-		default:
-
+		case <-l.workerChan:
 			keys, err := l.redis.BLPop(l.ctx, time.Second*10, l.listKey).Result()
 			if err != nil {
 				if err != redis.Nil {
@@ -502,6 +505,10 @@ func (l *Once) batchGetTasks() {
 
 // 执行任务
 func (l *Once) processTask(key string) {
+	defer func() {
+		<-l.workerChan
+	}()
+
 	begin := time.Now()
 
 	ctx, cancel := context.WithTimeout(l.ctx, l.timeout)
