@@ -92,8 +92,8 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 		instanceId:     U.String(),
 		cronParser:     op.cronParser,
 		batchSize:      op.batchSize,
-		workerChan:     make(chan struct{}, op.maxRunCount),
-		maxWorkers:     op.maxRunCount,
+		workerChan:     make(chan struct{}, op.maxWorkers),
+		maxWorkers:     op.maxWorkers,
 	}
 
 	// 初始化优先级
