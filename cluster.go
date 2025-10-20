@@ -541,28 +541,34 @@ func (c *Cluster) executeTasks() {
 		case <-c.ctx.Done():
 			return
 		case c.workerChan <- struct{}{}:
-			if c.usePriority && !c.priority.IsLatest(c.ctx) {
-				time.Sleep(5 * time.Second)
-				continue
-			}
+			func() {
+				defer func() {
+					<-c.workerChan
+				}()
 
-			taskID, err := c.redis.BLPop(c.ctx, 10*time.Second, c.listKey).Result()
-			if err != nil {
-				if err != redis.Nil {
-					c.logger.Errorf(c.ctx, "Failed to pop task: %v", err)
-					// Redis 异常，休眠一会儿
+				if c.usePriority && !c.priority.IsLatest(c.ctx) {
 					time.Sleep(5 * time.Second)
+					return
 				}
-				continue
-			}
 
-			if len(taskID) < 2 {
-				c.logger.Errorf(c.ctx, "Invalid BLPop result: %v", taskID)
-				// 数据异常，继续下一个
-				continue
-			}
+				taskID, err := c.redis.BLPop(c.ctx, 10*time.Second, c.listKey).Result()
+				if err != nil {
+					if err != redis.Nil {
+						c.logger.Errorf(c.ctx, "Failed to pop task: %v", err)
+						// Redis 异常，休眠一会儿
+						time.Sleep(5 * time.Second)
+					}
+					return
+				}
 
-			go c.processTask(taskID[1])
+				if len(taskID) < 2 {
+					c.logger.Errorf(c.ctx, "Invalid BLPop result: %v", taskID)
+					// 数据异常，继续下一个
+					return
+				}
+
+				go c.processTask(taskID[1])
+			}()
 		}
 	}
 
@@ -575,9 +581,6 @@ type ReJobData struct {
 
 // 执行任务
 func (l *Cluster) processTask(taskId string) {
-	defer func() {
-		<-l.workerChan
-	}()
 
 	begin := time.Now()
 

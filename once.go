@@ -289,38 +289,40 @@ func (l *Once) executeTasks() {
 
 	for {
 
-		if l.usePriority {
-			if !l.priority.IsLatest(l.ctx) {
-				time.Sleep(time.Second * 5)
-				continue
-			}
-		}
-
 		select {
 		case <-l.stopChan:
 			return
 		case <-l.ctx.Done():
 			return
 		case l.workerChan <- struct{}{}:
+			func() {
+				defer func() {
+					<-l.workerChan
+				}()
 
-			keys, err := l.redis.BLPop(l.ctx, time.Second*10, l.listKey).Result()
-			if err != nil {
-				if err != redis.Nil {
-					l.logger.Errorf(l.ctx, "Failed to pop task: %v", err)
-					// Redis 异常，休眠一会儿再重试
+				if l.usePriority && !l.priority.IsLatest(l.ctx) {
 					time.Sleep(time.Second * 5)
+					return
 				}
-				continue
-			}
 
-			if len(keys) < 2 {
-				l.logger.Errorf(l.ctx, "Invalid task data: %v", keys)
-				// 数据异常，继续下一个
-				continue
-			}
-			// 处理任务
-			go l.processTask(keys[1])
+				keys, err := l.redis.BLPop(l.ctx, time.Second*10, l.listKey).Result()
+				if err != nil {
+					if err != redis.Nil {
+						l.logger.Errorf(l.ctx, "Failed to pop task: %v", err)
+						// Redis 异常，休眠一会儿再重试
+						time.Sleep(time.Second * 5)
+					}
+					return
+				}
 
+				if len(keys) < 2 {
+					l.logger.Errorf(l.ctx, "Invalid task data: %v", keys)
+					// 数据异常，继续下一个
+					return
+				}
+				// 处理任务
+				go l.processTask(keys[1])
+			}()
 		}
 	}
 
@@ -518,9 +520,6 @@ func (l *Once) batchGetTasks() {
 
 // 执行任务
 func (l *Once) processTask(key string) {
-	defer func() {
-		<-l.workerChan
-	}()
 
 	begin := time.Now()
 
