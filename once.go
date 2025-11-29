@@ -349,6 +349,9 @@ func (l *Once) parseRedisKey(key string) (OnceTaskType, string, error) {
 // @param delayTime time.Duration 延迟时间
 // @param attachData interface{} 附加数据
 func (l *Once) Save(ctx context.Context, taskType OnceTaskType, taskId string, delayTime time.Duration, attachData any) error {
+	if delayTime < 0 {
+		delayTime = 0
+	}
 	execTime := time.Now().Add(delayTime)
 	return l.save(ctx, jobTypeOnce, taskType, taskId, []time.Time{execTime}, attachData, 0)
 }
@@ -425,8 +428,7 @@ func (w *Once) save(ctx context.Context, jobType jobType, taskType OnceTaskType,
 // 添加任务(不覆盖)
 func (l *Once) Create(ctx context.Context, taskType OnceTaskType, taskId string, delayTime time.Duration, attachData any) error {
 	if delayTime <= 0 {
-		l.logger.Errorf(ctx, "delay time must be positive taskType:%v taskId:%v attachData:%v", taskType, taskId, attachData)
-		return ErrDelayTime
+		delayTime = 0
 	}
 	execTime := time.Now().Add(delayTime)
 	return l.create(ctx, jobTypeOnce, taskType, taskId, []time.Time{execTime}, attachData, 0)
