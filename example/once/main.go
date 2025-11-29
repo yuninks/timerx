@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -169,6 +170,14 @@ func (l *OnceWorker) Worker(ctx context.Context, taskType timerx.OnceTaskType, t
 func callback(ctx context.Context, extendData any) error {
 
 	fmt.Println("任务执行了", extendData, "时间:", time.Now().Format("2006-01-02 15:04:05"))
+
+	// 解析文件路径，每天一个文件
+	path, _ := filepath.Abs("./")
+	// 拼接文件路径
+	save_path = filepath.Join(path, "/cache/once/"+time.Now().Format("2006-01-02")+".log")
+	// 创建文件夹
+	dir := filepath.Dir(save_path)
+	os.MkdirAll(dir, 0755)
 
 	// 追加到文件
 	file, err := os.OpenFile(save_path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
