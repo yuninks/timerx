@@ -7,8 +7,8 @@ require (
 	github.com/redis/go-redis/v9 v9.14.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.11.1
-	github.com/yuninks/cachex v1.0.5
-	github.com/yuninks/lockx v1.1.3
+	github.com/yuninks/cachex v1.0.6
+	github.com/yuninks/lockx v1.1.4
 )
 
 require (
