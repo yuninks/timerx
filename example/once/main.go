@@ -23,7 +23,7 @@ func main() {
 	ctx := context.Background()
 
 	client := getRedis()
-	once, err := timerx.InitOnce(ctx, client, "once_test", &OnceWorker{}, timerx.WithBatchSize(1000))
+	once, err := timerx.InitOnce(ctx, client, "once_01", &OnceWorker{}, timerx.WithBatchSize(1000))
 	if err != nil {
 		panic(err)
 	}
@@ -52,6 +52,7 @@ func stabilityTest(ctx context.Context, once *timerx.Once) {
 			str := t.Format("2006-01-02 15:04:05")
 
 			once.Create(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_create_0_%d", time.Now().Unix()), 0, "Create 间隔0s ["+str+"]")
+			once.Create(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_create_1_%d", time.Now().Unix()), time.Second*1, "Create 间隔1s ["+str+"]")
 			once.Create(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_create_10_%d", time.Now().Unix()), time.Second*10, "Create 间隔10s ["+str+"]")
 			once.Create(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_create_15_%d", time.Now().Unix()), time.Second*15, "Create 间隔15s ["+str+"]")
 			once.Create(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_create_30_%d", time.Now().Unix()), time.Second*30, "Create 间隔30s ["+str+"]")
@@ -62,6 +63,7 @@ func stabilityTest(ctx context.Context, once *timerx.Once) {
 			once.Create(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_create_1800_%d", time.Now().Unix()), time.Second*1800, "Create 间隔1800s ["+str+"]") // 30分钟
 
 			once.Save(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_save_0_%d", time.Now().Unix()), 0, "Save 间隔0s ["+str+"]")
+			once.Save(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_save_1_%d", time.Now().Unix()), time.Second*1, "Save 间隔1s ["+str+"]")
 			once.Save(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_save_10_%d", time.Now().Unix()), time.Second*10, "Save 间隔10s ["+str+"]")
 			once.Save(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_save_15_%d", time.Now().Unix()), time.Second*15, "Save 间隔15s ["+str+"]")
 			once.Save(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_save_30_%d", time.Now().Unix()), time.Second*30, "Save 间隔30s ["+str+"]")
@@ -72,6 +74,7 @@ func stabilityTest(ctx context.Context, once *timerx.Once) {
 			once.Save(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_save_1800_%d", time.Now().Unix()), time.Second*1800, "Save 间隔1800s ["+str+"]") // 30分钟
 
 			once.CreateByTime(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_create_by_0_%d", time.Now().Unix()), time.Now(), "CreateByTime 当前时间 ["+str+"]")
+			once.CreateByTime(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_create_by_1_%d", time.Now().Unix()), time.Now().Add(time.Second*1), "CreateByTime 当前时间+1s ["+str+"]")
 			once.CreateByTime(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_create_by_10_%d", time.Now().Unix()), time.Now().Add(time.Second*10), "CreateByTime 当前时间+10s ["+str+"]")
 			once.CreateByTime(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_create_by_15_%d", time.Now().Unix()), time.Now().Add(time.Second*15), "CreateByTime 当前时间+15s ["+str+"]")
 			once.CreateByTime(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_create_by_30_%d", time.Now().Unix()), time.Now().Add(time.Second*30), "CreateByTime 当前时间+30s ["+str+"]")
@@ -82,6 +85,7 @@ func stabilityTest(ctx context.Context, once *timerx.Once) {
 			once.CreateByTime(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_create_by_1800_%d", time.Now().Unix()), time.Now().Add(time.Second*1800), "CreateByTime 当前时间+1800s ["+str+"]") // 30分钟
 
 			once.SaveByTime(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_save_by_0_%d", time.Now().Unix()), time.Now(), "SaveByTime 当前时间 ["+str+"]")
+			once.SaveByTime(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_save_by_1_%d", time.Now().Unix()), time.Now().Add(time.Second*1), "SaveByTime 当前时间+1s ["+str+"]")
 			once.SaveByTime(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_save_by_10_%d", time.Now().Unix()), time.Now().Add(time.Second*10), "SaveByTime 当前时间+10s ["+str+"]")
 			once.SaveByTime(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_save_by_15_%d", time.Now().Unix()), time.Now().Add(time.Second*15), "SaveByTime 当前时间+15s ["+str+"]")
 			once.SaveByTime(ctx, OnceTaskTypeNormal, fmt.Sprintf("stabilityTest_task_save_by_30_%d", time.Now().Unix()), time.Now().Add(time.Second*30), "SaveByTime 当前时间+30s ["+str+"]")

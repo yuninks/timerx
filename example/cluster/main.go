@@ -20,7 +20,7 @@ func main() {
 
 	ops := []timerx.Option{}
 
-	clu, err := timerx.InitCluster(ctx, client, "cluster", ops...)
+	clu, err := timerx.InitCluster(ctx, client, "cluster_01", ops...)
 	if err != nil {
 		panic(err)
 	}
