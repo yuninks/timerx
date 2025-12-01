@@ -252,15 +252,14 @@ func (c *Single) EveryMinute(ctx context.Context, taskId string, second int, cal
 
 // 特定时间间隔
 func (c *Single) EverySpace(ctx context.Context, taskId string, spaceTime time.Duration, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) (int64, error) {
-	nowTime := time.Now().In(c.location)
 
 	if spaceTime < 0 {
 		c.logger.Errorf(ctx, "间隔时间不能小于0")
 		return 0, ErrIntervalTime
 	}
 
-	// 获取当天的零点时间
-	zeroTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), 0, 0, 0, 0, nowTime.Location())
+	// 固定时间点为20250101 00:00:00，便于计算下一次执行时间
+	zeroTime := time.Date(2025, 1, 1, 0, 0, 0, 0, c.location)
 
 	jobData := JobData{
 		JobType: JobTypeInterval,
@@ -274,9 +273,8 @@ func (c *Single) EverySpace(ctx context.Context, taskId string, spaceTime time.D
 }
 
 func (l *Single) Cron(ctx context.Context, taskId string, cronExpression string, callback func(ctx context.Context, extendData any) error, extendData any, opt ...Option) (int64, error) {
-	nowTime := time.Now().In(l.location)
-	// 获取当天的零点时间
-	zeroTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), 0, 0, 0, 0, nowTime.Location())
+	// 固定时间点为20250101 00:00:00，便于计算下一次执行时间
+	zeroTime := time.Date(2025, 1, 1, 0, 0, 0, 0, l.location)
 
 	options := Options{}
 	for _, o := range opt {

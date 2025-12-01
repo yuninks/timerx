@@ -352,15 +352,14 @@ func (c *Cluster) EveryMinute(ctx context.Context, taskId string, second int, ca
 
 // 特定时间间隔
 func (c *Cluster) EverySpace(ctx context.Context, taskId string, spaceTime time.Duration, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) error {
-	nowTime := time.Now().In(c.location)
 
 	if spaceTime < 0 {
 		c.logger.Errorf(ctx, "间隔时间不能小于0")
 		return errors.New("间隔时间不能小于0")
 	}
 
-	// 获取当天的零点时间
-	zeroTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), 0, 0, 0, 0, nowTime.Location())
+	// 固定时间点为20250101 00:00:00，便于计算下一次执行时间
+	zeroTime := time.Date(2025, 1, 1, 0, 0, 0, 0, c.location)
 
 	jobData := JobData{
 		JobType:      JobTypeInterval,
@@ -381,9 +380,8 @@ func (c *Cluster) EverySpace(ctx context.Context, taskId string, spaceTime time.
 // @param extendData interface{} 扩展数据
 // @return error
 func (l *Cluster) Cron(ctx context.Context, taskId string, cronExpression string, callback func(ctx context.Context, extendData any) error, extendData any, opt ...Option) error {
-	nowTime := time.Now().In(l.location)
-	// 获取当天的零点时间
-	zeroTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), 0, 0, 0, 0, nowTime.Location())
+	// 固定时间点为20250101 00:00:00，便于计算下一次执行时间
+	zeroTime := time.Date(2025, 1, 1, 0, 0, 0, 0, l.location)
 
 	options := newEmptyOptions(opt...)
 	cronParser := l.cronParser
