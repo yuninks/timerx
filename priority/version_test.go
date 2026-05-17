@@ -6,7 +6,6 @@ import (
 	"github.com/yuninks/timerx/priority"
 )
 
-
 func TestVersionToPriority(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -18,6 +17,18 @@ func TestVersionToPriority(t *testing.T) {
 			name:    "standard version",
 			version: "1.2.3",
 			want:    1002003000000,
+			wantErr: false,
+		},
+		{
+			name:    "standard version0",
+			version: "0.0.0",
+			want:    0,
+			wantErr: false,
+		},
+				{
+			name:    "standard version1",
+			version: "1.0.0",
+			want:    1000000000000,
 			wantErr: false,
 		},
 		{

@@ -54,6 +54,8 @@ type Cluster struct {
 	cache      *cachex.Cache        // 本地缓存
 	cronParser *cron.Parser         // cron表达式解析器
 	batchSize  int                  // 批量获取任务的数量
+	workerChan chan struct{}        // worker
+	maxWorkers int                  // 最大worker数量
 }
 
 // 初始化定时器
@@ -85,16 +87,29 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 		setKey:         "timer:cluster_setKey" + keyPrefix,         // 重入集合
 		priorityKey:    "timer:cluster_priorityKey" + keyPrefix,    // 全局优先级的key
 		executeInfoKey: "timer:cluster_executeInfoKey" + keyPrefix, // 执行情况的key 有序集合
-		usePriority:    op.usePriority,
+		usePriority:    false,
 		stopChan:       make(chan struct{}),
 		instanceId:     U.String(),
 		cronParser:     op.cronParser,
 		batchSize:      op.batchSize,
+		workerChan:     make(chan struct{}, op.maxWorkers),
+		maxWorkers:     op.maxWorkers,
 	}
 
 	// 初始化优先级
 
-	if clu.usePriority {
+	if op.priorityType != priorityTypeNone {
+
+		clu.usePriority = true
+
+		if op.priorityType == priorityTypeVersion {
+			pVal, err := priority.PriorityByVersion(op.priorityVersion)
+			if err != nil {
+				clu.logger.Errorf(ctx, "PriorityByVersion version:%s err:%v", op.priorityVersion, err)
+				return nil, err
+			}
+			op.priorityVal = pVal
+		}
 
 		pri, err := priority.InitPriority(
 			ctx,
@@ -337,15 +352,14 @@ func (c *Cluster) EveryMinute(ctx context.Context, taskId string, second int, ca
 
 // 特定时间间隔
 func (c *Cluster) EverySpace(ctx context.Context, taskId string, spaceTime time.Duration, callback func(ctx context.Context, extendData interface{}) error, extendData interface{}) error {
-	nowTime := time.Now().In(c.location)
 
 	if spaceTime < 0 {
 		c.logger.Errorf(ctx, "间隔时间不能小于0")
 		return errors.New("间隔时间不能小于0")
 	}
 
-	// 获取当天的零点时间
-	zeroTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), 0, 0, 0, 0, nowTime.Location())
+	// 固定时间点为20250101 00:00:00，便于计算下一次执行时间
+	zeroTime := time.Date(2025, 1, 1, 0, 0, 0, 0, c.location)
 
 	jobData := JobData{
 		JobType:      JobTypeInterval,
@@ -366,9 +380,8 @@ func (c *Cluster) EverySpace(ctx context.Context, taskId string, spaceTime time.
 // @param extendData interface{} 扩展数据
 // @return error
 func (l *Cluster) Cron(ctx context.Context, taskId string, cronExpression string, callback func(ctx context.Context, extendData any) error, extendData any, opt ...Option) error {
-	nowTime := time.Now().In(l.location)
-	// 获取当天的零点时间
-	zeroTime := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), 0, 0, 0, 0, nowTime.Location())
+	// 固定时间点为20250101 00:00:00，便于计算下一次执行时间
+	zeroTime := time.Date(2025, 1, 1, 0, 0, 0, 0, l.location)
 
 	options := newEmptyOptions(opt...)
 	cronParser := l.cronParser
@@ -519,34 +532,41 @@ func (c *Cluster) executeTasks() {
 	defer c.wg.Done()
 
 	for {
+
 		select {
 		case <-c.stopChan:
 			return
 		case <-c.ctx.Done():
 			return
-		default:
-			if c.usePriority && !c.priority.IsLatest(c.ctx) {
-				time.Sleep(5 * time.Second)
-				continue
-			}
+		case c.workerChan <- struct{}{}:
+			func() {
+				defer func() {
+					<-c.workerChan
+				}()
 
-			taskID, err := c.redis.BLPop(c.ctx, 10*time.Second, c.listKey).Result()
-			if err != nil {
-				if err != redis.Nil {
-					c.logger.Errorf(c.ctx, "Failed to pop task: %v", err)
-					// Redis 异常，休眠一会儿
+				if c.usePriority && !c.priority.IsLatest(c.ctx) {
 					time.Sleep(5 * time.Second)
+					return
 				}
-				continue
-			}
 
-			if len(taskID) < 2 {
-				c.logger.Errorf(c.ctx, "Invalid BLPop result: %v", taskID)
-				// 数据异常，继续下一个
-				continue
-			}
+				taskID, err := c.redis.BLPop(c.ctx, 10*time.Second, c.listKey).Result()
+				if err != nil {
+					if err != redis.Nil {
+						c.logger.Errorf(c.ctx, "Failed to pop task: %v", err)
+						// Redis 异常，休眠一会儿
+						time.Sleep(5 * time.Second)
+					}
+					return
+				}
 
-			go c.processTask(taskID[1])
+				if len(taskID) < 2 {
+					c.logger.Errorf(c.ctx, "Invalid BLPop result: %v", taskID)
+					// 数据异常，继续下一个
+					return
+				}
+
+				go c.processTask(taskID[1])
+			}()
 		}
 	}
 
@@ -559,6 +579,7 @@ type ReJobData struct {
 
 // 执行任务
 func (l *Cluster) processTask(taskId string) {
+
 	begin := time.Now()
 
 	ctx, cancel := context.WithTimeout(l.ctx, l.timeout)

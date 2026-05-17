@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -35,22 +36,44 @@ func main() {
 // space
 func space(ctx context.Context, clu *timerx.Single) {
 	// 每秒执行一次
-	_, err := clu.EverySpace(ctx, "space_test_second", 1*time.Second, callback, "space 这是秒任务")
+	_, err := clu.EverySpace(ctx, "space_test_second_1", 1*time.Second, callback, "space 这是秒任务")
 	fmt.Println(err)
+	_, err = clu.EverySpace(ctx, "space_test_second_5", 5*time.Second, callback, "space 这是5秒任务")
+	fmt.Println(err)
+
 	// 每分钟执行一次
-	_, err = clu.EverySpace(ctx, "space_test_minute", 1*time.Minute, callback, "space 这是分钟任务")
+	_, err = clu.EverySpace(ctx, "space_test_minute_1", 1*time.Minute, callback, "space 这是分钟任务")
 	fmt.Println(err)
+	_, err = clu.EverySpace(ctx, "space_test_minute_5", 5*time.Minute, callback, "space 这是5分钟任务")
+	fmt.Println(err)
+
 	// 每小时执行一次
-	_, err = clu.EverySpace(ctx, "space_test_hour", 1*time.Hour, callback, "space 这是小时任务")
+	_, err = clu.EverySpace(ctx, "space_test_hour_1", 1*time.Hour, callback, "space 这是小时任务")
 	fmt.Println(err)
+	_, err = clu.EverySpace(ctx, "space_test_hour_2", 2*time.Hour, callback, "space 这是2小时任务")
+	fmt.Println(err)
+	_, err = clu.EverySpace(ctx, "space_test_hour_3", 3*time.Hour, callback, "space 这是3小时任务")
+	fmt.Println(err)
+	_, err = clu.EverySpace(ctx, "space_test_hour_4", 4*time.Hour, callback, "space 这是4小时任务")
+	fmt.Println(err)
+	_, err = clu.EverySpace(ctx, "space_test_hour_5", 5*time.Hour, callback, "space 这是5小时任务")
+	fmt.Println(err)
+
 	// 每天执行一次
-	_, err = clu.EverySpace(ctx, "space_test_day", 24*time.Hour, callback, "space 这是天任务")
+	_, err = clu.EverySpace(ctx, "space_test_day_1", 24*time.Hour, callback, "space 这是天任务")
 	fmt.Println(err)
+	_, err = clu.EverySpace(ctx, "space_test_day_2", 2*24*time.Hour, callback, "space 这是2天任务")
+	fmt.Println(err)
+	_, err = clu.EverySpace(ctx, "space_test_day_3", 3*24*time.Hour, callback, "space 这是3天任务")
+	fmt.Println(err)
+
 	// 每周执行一次
-	_, err = clu.EverySpace(ctx, "space_test_week", 7*24*time.Hour, callback, "space 这是周任务")
+	_, err = clu.EverySpace(ctx, "space_test_week_1", 7*24*time.Hour, callback, "space 这是周任务")
 	fmt.Println(err)
+
+
 	// 每月执行一次
-	_, err = clu.EverySpace(ctx, "space_test_month", 30*24*time.Hour, callback, "space 这是月任务")
+	_, err = clu.EverySpace(ctx, "space_test_month_1", 30*24*time.Hour, callback, "space 这是月任务")
 	fmt.Println(err)
 
 }
@@ -248,6 +271,14 @@ func getRedis() *redis.Client {
 func callback(ctx context.Context, extendData any) error {
 
 	fmt.Println("任务执行了", extendData, "时间:", time.Now().Format("2006-01-02 15:04:05"))
+
+	// 解析文件路径，每天一个文件
+	path, _ := filepath.Abs("./")
+	// 拼接文件路径
+	save_path = filepath.Join(path, "/cache/single/"+time.Now().Format("2006-01-02")+".log")
+	// 创建文件夹
+	dir := filepath.Dir(save_path)
+	os.MkdirAll(dir, 0755)
 
 	// 追加到文件
 	file, err := os.OpenFile(save_path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
