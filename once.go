@@ -114,10 +114,10 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 		ctx:              ctx,
 		cancel:           cancel,
 		logger:           op.logger,
-		zsetKey:          "timer:once_zsetkey" + keyPrefix,
-		listKey:          "timer:once_listkey" + keyPrefix,
-		executeInfoKey:   "timer:once_executeInfoKey" + keyPrefix,
-		globalLockPrefix: "timer:once_globalLockPrefix" + keyPrefix,
+		zsetKey:          fmt.Sprintf("timer:{%s}:once_zset", keyPrefix),
+		listKey:          fmt.Sprintf("timer:{%s}:once_list", keyPrefix),
+		executeInfoKey:   fmt.Sprintf("timer:{%s}:once_execinfo", keyPrefix),
+		globalLockPrefix: fmt.Sprintf("timer:{%s}:once_lock:", keyPrefix),
 		usePriority:      false,
 		redis:            re,
 		worker:           call,
@@ -418,7 +418,8 @@ func (w *Once) save(ctx context.Context, jobType jobType, taskType OnceTaskType,
 
 	dataExpire := time.Until(expiresTime)
 
-	pipe.SetEx(w.ctx, w.keyPrefix+redisKey, b, dataExpire)
+	dataKey := fmt.Sprintf("timer:{%s}:once_data:%s", w.keyPrefix, redisKey)
+	pipe.SetEx(w.ctx, dataKey, b, dataExpire)
 	pipe.ZAdd(w.ctx, w.zsetKey, redis.Z{
 		Score:  float64(nextTime.UnixMilli()),
 		Member: redisKey,
@@ -492,9 +493,10 @@ func (l *Once) create(ctx context.Context, source createSource, jobType jobType,
 // 删除任务
 func (w *Once) Delete(taskType OnceTaskType, taskId string) error {
 	redisKey := w.buildRedisKey(taskType, taskId)
+	dataKey := fmt.Sprintf("timer:{%s}:once_data:%s", w.keyPrefix, redisKey)
 
 	pipe := w.redis.TxPipeline()
-	pipe.Del(w.ctx, redisKey)
+	pipe.Del(w.ctx, dataKey)
 	pipe.ZRem(w.ctx, w.zsetKey, redisKey)
 
 	_, err := pipe.Exec(w.ctx)
@@ -587,8 +589,8 @@ func (l *Once) processTask(key string) {
 	}()
 
 	// 读取数据
-	redisKey := l.keyPrefix + l.buildRedisKey(taskType, taskId)
-	str, err := l.redis.Get(ctx, redisKey).Result()
+	dataKey := fmt.Sprintf("timer:{%s}:once_data:%s", l.keyPrefix, l.buildRedisKey(taskType, taskId))
+	str, err := l.redis.Get(ctx, dataKey).Result()
 	if err != nil {
 		l.logger.Errorf(ctx, "processTask redis.Get key:%s err:%s", key, err)
 		return

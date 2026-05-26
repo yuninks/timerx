@@ -131,8 +131,8 @@ func TestSetPriorityScenarios(t *testing.T) {
 	ctx := context.Background()
 
 	redisConn := getRedis()
-	// 删除Key
-	redisConn.Del(ctx, "timer:priority_test22")
+	// 删除Key (new key format with hash tag)
+	redisConn.Del(ctx, "timer:{test22}:priority_")
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -197,7 +197,7 @@ func TestErrorScenarios(t *testing.T) {
 
 		priority := &Priority{
 			redis:    getRedis(),
-			redisKey: "timer:priority_test",
+			redisKey: "timer:{test}:priority_",
 			priority: 100,
 			ctx:      ctx,
 		}

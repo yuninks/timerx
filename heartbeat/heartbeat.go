@@ -3,6 +3,7 @@ package heartbeat
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 	"time"
@@ -47,7 +48,7 @@ func InitHeartBeat(ctx context.Context, ref redis.UniversalClient, keyPrefix str
 		ctx:    ctx,
 		cancel: cancel,
 
-		heartbeatKey: "timer:heartbeat_key" + op.source + keyPrefix,
+		heartbeatKey: fmt.Sprintf("timer:{%s}:heartbeat_%s", keyPrefix, op.source),
 
 		priority:   op.priority,
 		redis:      ref,

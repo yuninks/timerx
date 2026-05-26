@@ -5,6 +5,7 @@ package leader
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -52,8 +53,8 @@ func InitLeader(ctx context.Context, ref redis.UniversalClient, keyPrefix string
 		ctx:              ctx,
 		cancel:           cancel,
 		redis:            ref,
-		leaderUniLockKey: "timer:leader_lockKey" + op.source + keyPrefix,
-		leaderKey:        "timer:leader" + op.source + keyPrefix,
+		leaderUniLockKey: fmt.Sprintf("timer:{%s}:leader_lock_%s", keyPrefix, op.source),
+		leaderKey:        fmt.Sprintf("timer:{%s}:leader_%s", keyPrefix, op.source),
 		priority:         op.priority,
 		instanceId:       op.instanceId,
 		logger:           op.logger,

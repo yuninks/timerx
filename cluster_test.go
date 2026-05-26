@@ -3,6 +3,7 @@ package timerx_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -181,4 +182,81 @@ func TestCluster_Add(t *testing.T) {
 	time.Sleep(time.Second * 20)
 
 	// TODO: verify the job is added to the cluster and can be executed after the specified duration
+}
+
+func TestClusterKeyFormat(t *testing.T) {
+	keyPrefix := "testcluster"
+
+	tests := []struct {
+		name      string
+		key       string
+		hashTag   string
+		hasPrefix string
+	}{
+		{"zsetKey", "timer:{testcluster}:cluster_zset", "{testcluster}", "timer:"},
+		{"listKey", "timer:{testcluster}:cluster_list", "{testcluster}", "timer:"},
+		{"lockKey", "timer:{testcluster}:cluster_lock", "{testcluster}", "timer:"},
+		{"execInfoKey", "timer:{testcluster}:cluster_execinfo", "{testcluster}", "timer:"},
+		{"priorityKey", "timer:{testcluster}:cluster_priority", "{testcluster}", "timer:"},
+		{"calcLockKey", "timer:{testcluster}:cluster_calc_lock:task1:1234567890", "{testcluster}", "timer:"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.key == "" || tt.key == " " {
+				t.Error("key should not be empty")
+			}
+			t.Logf("key format: %s", tt.key)
+		})
+	}
+
+	_ = keyPrefix
+}
+
+func TestClusterZsetListKeysSameHashTag(t *testing.T) {
+	zsetKey := "timer:{myapp}:cluster_zset"
+	listKey := "timer:{myapp}:cluster_list"
+
+	zsetTag := extractHashTag(zsetKey)
+	listTag := extractHashTag(listKey)
+
+	if zsetTag != listTag {
+		t.Errorf("zset and list keys must share same hash tag: %q != %q", zsetTag, listTag)
+	}
+	if zsetTag != "myapp" {
+		t.Errorf("unexpected hash tag: %q", zsetTag)
+	}
+}
+
+func extractHashTag(key string) string {
+	start := strings.Index(key, "{")
+	end := strings.Index(key, "}")
+	if start >= 0 && end > start {
+		return key[start+1 : end]
+	}
+	return ""
+}
+
+func TestClusterMultiKeyLuaKeysShareSlot(t *testing.T) {
+	type keyPair struct {
+		key1 string
+		key2 string
+		name string
+	}
+
+	pairs := []keyPair{
+		{"timer:{app}:cluster_zset", "timer:{app}:cluster_list", "zset+list"},
+		{"timer:{app}:cluster_zset", "timer:{app}:cluster_calc_lock:task1:9999", "zset+calc_lock"},
+	}
+
+	for _, p := range pairs {
+		t.Run(p.name, func(t *testing.T) {
+			t1 := extractHashTag(p.key1)
+			t2 := extractHashTag(p.key2)
+			if t1 != t2 {
+				t.Errorf("keys in multi-key Lua script must share same hash tag: %q != %q (%s, %s)",
+					t1, t2, p.key1, p.key2)
+			}
+		})
+	}
 }

@@ -50,7 +50,7 @@ func InitPriority(ctx context.Context, re redis.UniversalClient, keyPrefix strin
 		priority:    priority,
 		redis:       re,
 		logger:      conf.logger,
-		redisKey:    "timer:priority_" + conf.source + keyPrefix,
+		redisKey:    fmt.Sprintf("timer:{%s}:priority_%s", keyPrefix, conf.source),
 		expireTime:  conf.expireTime,
 		setInterval: conf.updateInterval,
 		getInterval: conf.getInterval,
