@@ -23,10 +23,11 @@ type Leader struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	isLeader         bool         // 是否是领导
-	leaderLock       sync.RWMutex // 领导锁
-	leaderUniLockKey string       // 领导唯一锁
-	leaderKey        string       // 上报当前的Leader
+	isLeader         bool            // 是否是领导
+	leaderLock       sync.RWMutex    // 领导锁
+	leaderUniLockKey string          // 领导唯一锁
+	leaderKey        string          // 上报当前的Leader
+	leaderResetChan  chan (struct{}) // 快速抢占Leader位置
 
 	redis  redis.UniversalClient // redis
 	logger logger.Logger
@@ -58,6 +59,7 @@ func InitLeader(ctx context.Context, ref redis.UniversalClient, keyPrefix string
 		priority:         op.priority,
 		instanceId:       op.instanceId,
 		logger:           op.logger,
+		leaderResetChan:  make(chan struct{}, 1), // 非阻塞
 	}
 
 	l.wg.Add(1)
@@ -87,6 +89,8 @@ func (l *Leader) leaderElection() {
 	for {
 		select {
 		case <-ticker.C:
+			l.getLeaderLock()
+		case <-l.leaderResetChan:
 			l.getLeaderLock()
 		case <-l.ctx.Done():
 			return
@@ -137,7 +141,7 @@ func (l *Leader) getLeaderLock() error {
 		if l.priority == nil {
 			return
 		}
-
+		// 感知我不是Leader的情况
 		for {
 			select {
 			case <-ctx.Done():
@@ -159,6 +163,14 @@ func (l *Leader) getLeaderLock() error {
 	l.leaderLock.Lock()
 	l.isLeader = false
 	l.leaderLock.Unlock()
+
+	// 立刻尝试抢锁
+	go func() {
+		select {
+		case l.leaderResetChan <- struct{}{}:
+		default:
+		}
+	}()
 
 	return nil
 
