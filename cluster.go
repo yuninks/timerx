@@ -70,6 +70,9 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 
 	ctx, cancel := context.WithCancel(ctx)
 
+	// 清理 keyPrefix 中的 {} 字符，避免破坏 Redis Cluster hash tag
+	keyPrefix = sanitizeKeyPrefix(keyPrefix)
+
 	U, err := uuid.NewV7()
 	if err != nil {
 		op.logger.Errorf(ctx, "InitCluster uuid.NewV7 err:%v, using fallback", err)
@@ -548,10 +551,7 @@ func (c *Cluster) executeTasks() {
 		case <-c.ctx.Done():
 			return
 		case c.workerChan <- struct{}{}:
-			go func() {
-				defer func() {
-					<-c.workerChan
-				}()
+			func() {
 
 				if c.usePriority && !c.priority.IsLatest(c.ctx) {
 					time.Sleep(5 * time.Second)
@@ -572,7 +572,7 @@ func (c *Cluster) executeTasks() {
 					return
 				}
 
-				c.processTask(taskID[1])
+				go c.processTask(taskID[1])
 			}()
 		}
 	}
@@ -581,6 +581,10 @@ func (c *Cluster) executeTasks() {
 
 // 执行任务
 func (l *Cluster) processTask(taskId string) {
+
+	defer func() {
+		<-l.workerChan
+	}()
 
 	begin := time.Now()
 
@@ -618,7 +622,8 @@ func (l *Cluster) processTask(taskId string) {
 	}
 
 	// 这里加一个全局锁
-	lock, err := lockx.NewGlobalLock(ctx, l.redis, taskId)
+	lockKey := l.lockKey + "_task_" + taskId
+	lock, err := lockx.NewGlobalLock(ctx, l.redis, lockKey)
 	if err != nil {
 		l.logger.Errorf(ctx, "doTask timer:获取锁失败:%s", taskId)
 		return

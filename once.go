@@ -106,6 +106,9 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 		return nil, errors.New("redis client is nil")
 	}
 
+	// 清理 keyPrefix 中的 {} 字符，避免破坏 Redis Cluster hash tag
+	keyPrefix = sanitizeKeyPrefix(keyPrefix)
+
 	ctx, cancel := context.WithCancel(ctx)
 
 	u, err := uuid.NewV7()
@@ -307,10 +310,7 @@ func (l *Once) executeTasks() {
 		case <-l.ctx.Done():
 			return
 		case l.workerChan <- struct{}{}:
-			go func() {
-				defer func() {
-					<-l.workerChan
-				}()
+			func() {
 
 				if l.usePriority && !l.priority.IsLatest(l.ctx) {
 					time.Sleep(time.Second * 5)
@@ -331,7 +331,7 @@ func (l *Once) executeTasks() {
 					return
 				}
 				// 处理任务
-				l.processTask(keys[1])
+				go l.processTask(keys[1])
 			}()
 		}
 	}
@@ -565,6 +565,10 @@ func (l *Once) batchGetTasks() {
 
 // 执行任务
 func (l *Once) processTask(key string) {
+
+	defer func() {
+		<-l.workerChan
+	}()
 
 	begin := time.Now()
 
