@@ -309,7 +309,7 @@ func (l *Once) executeTasks() {
 			return
 		case <-l.ctx.Done():
 			return
-		case l.workerChan <- struct{}{}:
+		default:
 			func() {
 
 				if l.usePriority && !l.priority.IsLatest(l.ctx) {
@@ -330,7 +330,10 @@ func (l *Once) executeTasks() {
 					l.logger.Errorf(l.ctx, "Invalid task data: %v", keys)
 					return
 				}
-				// 处理任务
+
+				// 限制并发数量
+				l.workerChan <- struct{}{}
+
 				go l.processTask(keys[1])
 			}()
 		}

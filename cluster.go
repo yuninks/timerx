@@ -550,7 +550,7 @@ func (c *Cluster) executeTasks() {
 			return
 		case <-c.ctx.Done():
 			return
-		case c.workerChan <- struct{}{}:
+		default:
 			func() {
 
 				if c.usePriority && !c.priority.IsLatest(c.ctx) {
@@ -571,6 +571,9 @@ func (c *Cluster) executeTasks() {
 					c.logger.Errorf(c.ctx, "Invalid BLPop result: %v", taskID)
 					return
 				}
+
+				// 限制并发数量
+				c.workerChan <- struct{}{}
 
 				go c.processTask(taskID[1])
 			}()
