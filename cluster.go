@@ -631,7 +631,7 @@ func (l *Cluster) processTask(taskId string) {
 		l.logger.Errorf(ctx, "doTask timer:获取锁失败:%s", taskId)
 		return
 	}
-	if b, err := lock.Lock(); !b {
+	if b, err := lock.Lock(); !b || err != nil {
 		l.logger.Errorf(ctx, "doTask timer:获取锁失败:%s %+v", taskId, err)
 		return
 	}

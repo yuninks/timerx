@@ -435,7 +435,11 @@ func (l *Single) iterator(ctx context.Context) {
 func (s *Single) executeTask(ctx context.Context, timer timerStr, originTime time.Time) {
 	// 创建带追踪ID的上下文
 
-	u, _ := uuid.NewV7()
+	u, err := uuid.NewV7()
+	if err != nil {
+		s.logger.Errorf(ctx, "Single executeTask uuid.NewV7 err:%v, using fallback", err)
+		u = uuid.New()
+	}
 
 	traceCtx := context.WithValue(ctx, "trace_id", u.String())
 	s.logger.Infof(traceCtx, "timer Single begin taskId:%s originTime:%d", timer.TaskId, originTime.UnixMilli())

@@ -90,7 +90,7 @@ func TestGetNextTime(t *testing.T) {
 				BaseTime:     tt,
 				IntervalTime: 1 * time.Hour,
 			},
-			expectedTime:  time.Date(2025, 10, 16, 12, 00, 0, 0, time.Local), // Assuming current date is March 7, 2022, 10:30 AM
+			expectedTime:  tt.Add(1 * time.Hour),
 			expectedError: nil,
 		},
 		{
@@ -100,7 +100,7 @@ func TestGetNextTime(t *testing.T) {
 				BaseTime:     tt,
 				IntervalTime: 1 * time.Minute,
 			},
-			expectedTime:  time.Date(2025, 10, 16, 10, 31, 0, 0, time.Local), // Assuming current date is March 7, 2022, 10:30 AM
+			expectedTime:  tt.Add(1 * time.Minute),
 			expectedError: nil,
 		},
 		{

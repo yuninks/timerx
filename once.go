@@ -106,6 +106,11 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 		return nil, errors.New("redis client is nil")
 	}
 
+	if call == nil {
+		op.logger.Errorf(ctx, "worker callback is nil")
+		return nil, errors.New("worker callback is nil")
+	}
+
 	// 清理 keyPrefix 中的 {} 字符，避免破坏 Redis Cluster hash tag
 	keyPrefix = sanitizeKeyPrefix(keyPrefix)
 
@@ -477,14 +482,14 @@ func (l *Once) create(ctx context.Context, source createSource, jobType jobType,
 			l.logger.Errorf(ctx, "processTask timer:获取锁失败:%s", taskId)
 			return err
 		}
-		if b, err := lock.Lock(); !b {
+		if b, err := lock.Lock(); !b || err != nil {
 			l.logger.Errorf(ctx, "processTask timer:获取锁失败:%s %+v", taskId, err)
 			return err
 		}
 		defer lock.Unlock()
 	}
 
-	score, err := l.redis.ZScore(l.ctx, l.zsetKey, redisKey).Result()
+	_, err := l.redis.ZScore(l.ctx, l.zsetKey, redisKey).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return l.save(ctx, jobType, taskType, taskId, taskTimes, attachData, runCount)
@@ -492,12 +497,8 @@ func (l *Once) create(ctx context.Context, source createSource, jobType jobType,
 		l.logger.Errorf(l.ctx, "redis.ZScore err:%v", err)
 		return err
 	}
-	if score > 0 {
 		l.logger.Errorf(l.ctx, "task exists taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
 		return ErrTaskExists
-	}
-
-	return l.save(ctx, jobType, taskType, taskId, taskTimes, attachData, runCount)
 }
 
 // 删除任务
@@ -600,7 +601,7 @@ func (l *Once) processTask(key string) {
 		l.logger.Errorf(ctx, "processTask timer:获取锁失败:%s", taskId)
 		return
 	}
-	if b, err := lock.Lock(); !b {
+	if b, err := lock.Lock(); !b || err != nil {
 		l.logger.Errorf(ctx, "processTask timer:获取锁失败:%s %+v", taskId, err)
 		return
 	}
@@ -643,7 +644,7 @@ func (l *Once) processTask(key string) {
 		// 删除任务
 		l.logger.Infof(ctx, "processTask delete key:%s", key)
 		if err := l.Delete(taskType, taskId); err != nil {
-			l.logger.Errorf(ctx, "processTask delete errprocessTask delete err:%v", err)
+			l.logger.Errorf(ctx, "processTask delete err:%v", err)
 		}
 		return
 	}

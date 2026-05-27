@@ -122,7 +122,7 @@ func WithMaxRetryCount(count int) Option {
 
 func WithMaxWorkers(count int) Option {
 	return func(o *Options) {
-		if count < 0 {
+		if count <= 0 {
 			count = 100
 		}
 		o.maxWorkers = count

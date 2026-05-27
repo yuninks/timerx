@@ -410,23 +410,19 @@ func TestSingleTimer_TaskDeletion(t *testing.T) {
 	assert.Equal(t, 0, timer.TaskCount())
 }
 
-// 测试GetNextTime函数（需要根据实际实现调整）
 func TestGetNextTime2(t *testing.T) {
 	now := time.Now().UTC()
+	baseTime := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), 0, 0, time.UTC)
 
-	// 测试间隔任务
 	jobData := timerx.JobData{
 		JobType:      timerx.JobTypeInterval,
 		IntervalTime: time.Minute,
-		// CreateTime:   now,
-		BaseTime: now,
+		BaseTime:     baseTime,
 	}
-
-	tt := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), 0, 0, time.UTC)
 
 	nextTime, err := timerx.GetNextTime(now, jobData)
 	assert.NoError(t, err)
-	assert.WithinDuration(t, tt.Add(time.Minute), *nextTime, time.Second)
+	assert.WithinDuration(t, baseTime.Add(time.Minute), *nextTime, time.Second)
 }
 
 // 基准测试
