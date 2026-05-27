@@ -70,7 +70,11 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 
 	ctx, cancel := context.WithCancel(ctx)
 
-	U, _ := uuid.NewV7()
+	U, err := uuid.NewV7()
+	if err != nil {
+		op.logger.Errorf(ctx, "InitCluster uuid.NewV7 err:%v, using fallback", err)
+		U = uuid.New()
+	}
 
 	clu := &Cluster{
 		ctx:            ctx,
@@ -204,7 +208,7 @@ func (l *Cluster) startDaemon() {
 }
 
 func (l *Cluster) cleanExecuteInfoLoop() {
-	l.wg.Done()
+	defer l.wg.Done()
 
 	ticker := time.NewTicker(time.Minute * 5)
 	defer ticker.Stop()
@@ -224,10 +228,11 @@ func (l *Cluster) cleanExecuteInfoLoop() {
 }
 
 // 清除过期任务
-func (l *Cluster) cleanExecuteInfo() error {
+func (l *Cluster) cleanExecuteInfo() {
 	// 移除执行信息
-	l.redis.ZRemRangeByScore(l.ctx, l.executeInfoKey, "0", strconv.FormatInt(time.Now().Add(-15*time.Minute).UnixMilli(), 10)).Err()
-	return nil
+	if err := l.redis.ZRemRangeByScore(l.ctx, l.executeInfoKey, "0", strconv.FormatInt(time.Now().Add(-15*time.Minute).UnixMilli(), 10)).Err(); err != nil {
+		l.logger.Errorf(l.ctx, "cleanExecuteInfo ZRemRangeByScore err:%v", err)
+	}
 }
 
 // scheduleTasks 调度任务（只有leader执行）
@@ -449,7 +454,11 @@ func (l *Cluster) calculateNextTimes() {
 
 	// 根据内部注册的任务列表计算下一次执行的时间
 	l.workerList.Range(func(key, value interface{}) bool {
-		val := value.(timerStr)
+		val, ok := value.(timerStr)
+		if !ok {
+			l.logger.Errorf(l.ctx, "Cluster calculateNextTimes invalid type in workerList for key:%v", key)
+			return true
+		}
 
 		nextTime, err := GetNextTime(time.Now().In(l.location), *val.JobData)
 		if err != nil {
@@ -539,7 +548,7 @@ func (c *Cluster) executeTasks() {
 		case <-c.ctx.Done():
 			return
 		case c.workerChan <- struct{}{}:
-			func() {
+			go func() {
 				defer func() {
 					<-c.workerChan
 				}()
@@ -553,7 +562,6 @@ func (c *Cluster) executeTasks() {
 				if err != nil {
 					if err != redis.Nil {
 						c.logger.Errorf(c.ctx, "Failed to pop task: %v", err)
-						// Redis 异常，休眠一会儿
 						time.Sleep(5 * time.Second)
 					}
 					return
@@ -561,20 +569,14 @@ func (c *Cluster) executeTasks() {
 
 				if len(taskID) < 2 {
 					c.logger.Errorf(c.ctx, "Invalid BLPop result: %v", taskID)
-					// 数据异常，继续下一个
 					return
 				}
 
-				go c.processTask(taskID[1])
+				c.processTask(taskID[1])
 			}()
 		}
 	}
 
-}
-
-type ReJobData struct {
-	TaskId string
-	Times  int
 }
 
 // 执行任务
@@ -585,7 +587,11 @@ func (l *Cluster) processTask(taskId string) {
 	ctx, cancel := context.WithTimeout(l.ctx, l.timeout)
 	defer cancel()
 
-	u, _ := uuid.NewV7()
+	u, err := uuid.NewV7()
+	if err != nil {
+		l.logger.Errorf(ctx, "processTask uuid.NewV7 err:%v, using fallback", err)
+		u = uuid.New()
+	}
 
 	ctx = context.WithValue(ctx, "trace_id", u.String())
 
@@ -593,10 +599,12 @@ func (l *Cluster) processTask(taskId string) {
 
 	// 上报执行情况
 	executeVal := fmt.Sprintf("tid:%s|insId:%s|uuid:%s|time:%s", taskId, l.instanceId, u.String(), begin.Format(time.RFC3339Nano))
-	l.redis.ZAdd(ctx, l.executeInfoKey, redis.Z{
+	if err := l.redis.ZAdd(ctx, l.executeInfoKey, redis.Z{
 		Score:  float64(begin.UnixMilli()),
 		Member: executeVal,
-	})
+	}).Err(); err != nil {
+		l.logger.Errorf(ctx, "processTask ZAdd executeInfo err:%v", err)
+	}
 
 	val, ok := l.workerList.Load(taskId)
 	if !ok {

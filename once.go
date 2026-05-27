@@ -108,7 +108,11 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 
 	ctx, cancel := context.WithCancel(ctx)
 
-	u, _ := uuid.NewV7()
+	u, err := uuid.NewV7()
+	if err != nil {
+		op.logger.Errorf(ctx, "InitOnce uuid.NewV7 err:%v, using fallback", err)
+		u = uuid.New()
+	}
 
 	wo := &Once{
 		ctx:              ctx,
@@ -233,7 +237,7 @@ func (l *Once) startDaemon() {
 }
 
 func (l *Once) cleanExecuteInfoLoop() {
-	l.wg.Done()
+	defer l.wg.Done()
 
 	ticker := time.NewTicker(time.Minute * 5)
 	defer ticker.Stop()
@@ -253,10 +257,11 @@ func (l *Once) cleanExecuteInfoLoop() {
 }
 
 // 清除过期任务
-func (l *Once) cleanExecuteInfo() error {
+func (l *Once) cleanExecuteInfo() {
 	// 移除执行信息
-	l.redis.ZRemRangeByScore(l.ctx, l.executeInfoKey, "0", strconv.FormatInt(time.Now().Add(-15*time.Minute).UnixMilli(), 10)).Err()
-	return nil
+	if err := l.redis.ZRemRangeByScore(l.ctx, l.executeInfoKey, "0", strconv.FormatInt(time.Now().Add(-15*time.Minute).UnixMilli(), 10)).Err(); err != nil {
+		l.logger.Errorf(l.ctx, "cleanExecuteInfo ZRemRangeByScore err:%v", err)
+	}
 }
 
 // 任务调度 领导
@@ -302,7 +307,7 @@ func (l *Once) executeTasks() {
 		case <-l.ctx.Done():
 			return
 		case l.workerChan <- struct{}{}:
-			func() {
+			go func() {
 				defer func() {
 					<-l.workerChan
 				}()
@@ -316,7 +321,6 @@ func (l *Once) executeTasks() {
 				if err != nil {
 					if err != redis.Nil {
 						l.logger.Errorf(l.ctx, "Failed to pop task: %v", err)
-						// Redis 异常，休眠一会儿再重试
 						time.Sleep(time.Second * 5)
 					}
 					return
@@ -324,11 +328,10 @@ func (l *Once) executeTasks() {
 
 				if len(keys) < 2 {
 					l.logger.Errorf(l.ctx, "Invalid task data: %v", keys)
-					// 数据异常，继续下一个
 					return
 				}
 				// 处理任务
-				go l.processTask(keys[1])
+				l.processTask(keys[1])
 			}()
 		}
 	}
@@ -409,7 +412,11 @@ func (w *Once) save(ctx context.Context, jobType jobType, taskType OnceTaskType,
 		RunCount:  runCount,
 		JobType:   jobType,
 	}
-	b, _ := json.Marshal(ed)
+	b, err := json.Marshal(ed)
+	if err != nil {
+		w.logger.Errorf(ctx, "save json.Marshal err:%v taskType:%v taskId:%v", err, taskType, taskId)
+		return err
+	}
 
 	// 使用事务确保原子性
 	pipe := w.redis.TxPipeline()
@@ -424,7 +431,7 @@ func (w *Once) save(ctx context.Context, jobType jobType, taskType OnceTaskType,
 		Score:  float64(nextTime.UnixMilli()),
 		Member: redisKey,
 	})
-	_, err := pipe.Exec(w.ctx)
+	_, err = pipe.Exec(w.ctx)
 	if err != nil {
 		w.logger.Errorf(w.ctx, "save task failed:%v taskType:%v taskId:%v attachData:%v retryCount:%v", err, taskType, taskId, attachData, runCount)
 		return err
@@ -509,8 +516,21 @@ func (w *Once) Delete(taskType OnceTaskType, taskId string) error {
 }
 
 // 获取任务
-func (l *Once) Get(taskType OnceTaskType, taskId string) {
-	//
+func (l *Once) Get(taskType OnceTaskType, taskId string) (any, error) {
+	redisKey := l.buildRedisKey(taskType, taskId)
+	dataKey := fmt.Sprintf("timer:{%s}:once_data:%s", l.keyPrefix, redisKey)
+	str, err := l.redis.Get(l.ctx, dataKey).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var ed extendData
+	if err := json.Unmarshal([]byte(str), &ed); err != nil {
+		return nil, err
+	}
+	return ed.Data, nil
 }
 
 // 批量获取任务
@@ -551,7 +571,11 @@ func (l *Once) processTask(key string) {
 	ctx, cancel := context.WithTimeout(l.ctx, l.timeout)
 	defer cancel()
 
-	u, _ := uuid.NewV7()
+	u, err := uuid.NewV7()
+	if err != nil {
+		l.logger.Errorf(ctx, "processTask uuid.NewV7 err:%v, using fallback", err)
+		u = uuid.New()
+	}
 
 	ctx = context.WithValue(ctx, "trace_id", u.String())
 
@@ -577,10 +601,12 @@ func (l *Once) processTask(key string) {
 
 	// 上报执行情况
 	executeVal := fmt.Sprintf("tid:%s|insId:%s|uuid:%s|time:%s", key, l.instanceId, u.String(), begin.Format(time.RFC3339Nano))
-	l.redis.ZAdd(ctx, l.executeInfoKey, redis.Z{
+	if err := l.redis.ZAdd(ctx, l.executeInfoKey, redis.Z{
 		Score:  float64(begin.UnixMilli()),
 		Member: executeVal,
-	})
+	}).Err(); err != nil {
+		l.logger.Errorf(ctx, "processTask ZAdd executeInfo err:%v", err)
+	}
 
 	defer func() {
 		if err := recover(); err != nil {
@@ -597,7 +623,10 @@ func (l *Once) processTask(key string) {
 	}
 
 	ed := extendData{}
-	json.Unmarshal([]byte(str), &ed)
+	if err := json.Unmarshal([]byte(str), &ed); err != nil {
+		l.logger.Errorf(ctx, "processTask json.Unmarshal err:%v key:%s", err, key)
+		return
+	}
 
 	resp := l.worker.Worker(ctx, taskType, taskId, ed.Data)
 	l.logger.Infof(ctx, "processTask exec key:%s resp:%+v data:%s", key, resp, str)

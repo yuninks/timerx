@@ -240,56 +240,18 @@ func calculateNextCronTime(t time.Time, job JobData) (*time.Time, error) {
 		return nil, ErrCronParser
 	}
 
-	s := *job.CronSchedule
-
-	next := s.Next(t)
+	next := job.CronSchedule.Next(t)
 	return &next, nil
 }
 
-func GetCronSche(CronExpression string, cronParser *cron.Parser) (*cron.Schedule, error) {
+func GetCronSche(CronExpression string, cronParser *cron.Parser) (cron.Schedule, error) {
 	if CronExpression == "" {
 		return nil, ErrCronExpression
 	}
 	if cronParser == nil {
 		return nil, ErrCronParser
 	}
-	sche, err := cronParser.Parse(CronExpression)
-	if err != nil {
-		return nil, err
-	}
-	return &sche, nil
+	return cronParser.Parse(CronExpression)
 }
 
-// 检查是否本周期可以运行
-// 检查是否本周期可以运行（已弃用，使用新的时间比较逻辑）
-// 保留此函数用于向后兼容，但建议使用新的时间计算逻辑
-func canRun(t time.Time, job JobData) bool {
-	targetTime := time.Date(t.Year(), t.Month(), t.Day(), job.Hour, job.Minute, job.Second, 0, t.Location())
 
-	switch job.JobType {
-	case JobTypeEveryMonth:
-		// 对于月任务，需要比较日期
-		targetTime = time.Date(t.Year(), t.Month(), job.Day, job.Hour, job.Minute, job.Second, 0, t.Location())
-		return !targetTime.Before(t)
-	case JobTypeEveryWeek:
-		// 对于周任务，需要比较星期
-		currentWeekday := t.Weekday()
-		if currentWeekday < job.Weekday {
-			return true
-		}
-		if currentWeekday == job.Weekday {
-			return targetTime.After(t) || targetTime.Equal(t)
-		}
-		return false
-	case JobTypeEveryDay:
-		return targetTime.After(t) || targetTime.Equal(t)
-	case JobTypeEveryHour:
-		hourTarget := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), job.Minute, job.Second, 0, t.Location())
-		return hourTarget.After(t) || hourTarget.Equal(t)
-	case JobTypeEveryMinute:
-		minuteTarget := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), job.Second, 0, t.Location())
-		return minuteTarget.After(t) || minuteTarget.Equal(t)
-	default:
-		return false
-	}
-}

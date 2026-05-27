@@ -150,7 +150,9 @@ func (l *HeartBeat) cleanHeartbeat(cleanSelf bool) error {
 	}
 
 	// 移除心跳
-	l.redis.ZRemRangeByScore(l.ctx, l.heartbeatKey, "0", strconv.FormatInt(time.Now().Add(-15*time.Second).UnixMilli(), 10)).Err()
+	if err := l.redis.ZRemRangeByScore(l.ctx, l.heartbeatKey, "0", strconv.FormatInt(time.Now().Add(-15*time.Second).UnixMilli(), 10)).Err(); err != nil {
+		l.logger.Errorf(l.ctx, "cleanHeartbeat ZRemRangeByScore err:%v", err)
+	}
 
 	return nil
 }

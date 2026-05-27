@@ -111,8 +111,11 @@ func (l *Leader) getLeaderLock() error {
 		l.logger.Errorf(l.ctx, "getLeaderLock err:%+v", err)
 		return err
 	}
-	if b, _ := lock.Lock(); !b {
-		// 加锁失败 非Reader
+	if b, err := lock.Lock(); !b || err != nil {
+		// 加锁失败 非Leader
+		if err != nil {
+			l.logger.Errorf(l.ctx, "getLeaderLock lock.Lock err:%+v", err)
+		}
 		l.leaderLock.Lock()
 		l.isLeader = false
 		l.leaderLock.Unlock()
@@ -152,10 +155,10 @@ func (l *Leader) getLeaderLock() error {
 	// 等待超时退出
 	<-lock.GetCtx().Done()
 
-	// 已过期
-	// l.leaderLock.Lock()
-	// l.isLeader = false
-	// l.leaderLock.Unlock()
+	// 锁已过期，重置leader状态
+	l.leaderLock.Lock()
+	l.isLeader = false
+	l.leaderLock.Unlock()
 
 	return nil
 

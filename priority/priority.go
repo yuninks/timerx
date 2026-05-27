@@ -182,7 +182,10 @@ func (p *Priority) setPriority() (string, error) {
 
 	// 解析结果
 	if resultMap, ok := result.([]interface{}); ok && len(resultMap) == 1 {
-		resultStr := resultMap[0].(string)
+		resultStr, ok := resultMap[0].(string)
+		if !ok {
+			return "", fmt.Errorf("script unexpected result type: %T", resultMap[0])
+		}
 		return resultStr, nil
 	}
 

@@ -18,7 +18,10 @@ type Options struct {
 
 func defaultOptions() Options {
 
-	u, _ := uuid.NewV7()
+	u, err := uuid.NewV7()
+	if err != nil {
+		u = uuid.New()
+	}
 
 	return Options{
 		getInterval:    time.Second * 2,
@@ -47,7 +50,10 @@ func WithLogger(log logger.Logger) Option {
 
 // 更新周期
 func WithUpdateInterval(d time.Duration) Option {
-	if d.Abs() < time.Second {
+	if d <= 0 {
+		d = time.Second * 5
+	}
+	if d < time.Second {
 		d = time.Second * 5
 	}
 	return func(o *Options) {

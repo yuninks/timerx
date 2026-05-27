@@ -17,7 +17,10 @@ type Options struct {
 
 func defaultOptions() Options {
 
-	u, _ := uuid.NewV7()
+	u, err := uuid.NewV7()
+	if err != nil {
+		u = uuid.New()
+	}
 
 	return Options{
 		logger:     logger.NewLogger(),

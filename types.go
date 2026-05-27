@@ -41,7 +41,7 @@ type JobData struct {
 	Minute         int            // 每小时的第几分钟
 	Second         int            // 每分钟的第几秒
 	CronExpression string         // cron表达式
-	CronSchedule   *cron.Schedule // cron表达式解析后的数据
+	CronSchedule   cron.Schedule // cron表达式解析后的数据
 }
 
 // 定义各个回调函数
