@@ -106,7 +106,7 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 		return nil, errors.New("redis client is nil")
 	}
 
-	if call == nil {
+	if call == nil && !op.allowNilFunc {
 		op.logger.Errorf(ctx, "worker callback is nil")
 		return nil, errors.New("worker callback is nil")
 	}
@@ -142,6 +142,11 @@ func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, c
 		maxRunCount:      op.maxRunCount,
 		workerChan:       make(chan struct{}, op.maxWorkers),
 		maxWorkers:       op.maxWorkers,
+	}
+
+	// 不需要回调
+	if call == nil {
+		return wo, nil
 	}
 
 	// 初始化优先级
@@ -497,8 +502,8 @@ func (l *Once) create(ctx context.Context, source createSource, jobType jobType,
 		l.logger.Errorf(l.ctx, "redis.ZScore err:%v", err)
 		return err
 	}
-		l.logger.Errorf(l.ctx, "task exists taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
-		return ErrTaskExists
+	l.logger.Errorf(l.ctx, "task exists taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
+	return ErrTaskExists
 }
 
 // 删除任务

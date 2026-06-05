@@ -18,6 +18,7 @@ type Options struct {
 	maxRunCount     int          // 单个任务最大运行次数 0代表不限
 	maxWorkers      int          // 最大工作协程数
 	cronParser      *cron.Parser // cron表达式解析器
+	allowNilFunc    bool         // 允许注册nil函数
 }
 
 type priorityType int8
@@ -43,6 +44,7 @@ func defaultOptions() Options {
 		maxRunCount:  0,
 		maxWorkers:   100,
 		cronParser:   &parser,
+		allowNilFunc: false,
 	}
 }
 
@@ -77,6 +79,13 @@ func WithLogger(log logger.Logger) Option {
 func WithLocation(zone *time.Location) Option {
 	return func(o *Options) {
 		o.location = zone
+	}
+}
+
+// 允许注册nil回调函数
+func WithAllowNilFunc(allow bool) Option { 
+	return func(o *Options) {
+		o.allowNilFunc = allow
 	}
 }
 
