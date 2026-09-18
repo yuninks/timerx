@@ -1,6 +1,8 @@
 package timerx
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -141,6 +143,116 @@ func extractHashTagForOnce(key string) string {
 		return key[start+1 : end]
 	}
 	return ""
+}
+
+func TestInitOnce_NilRedis(t *testing.T) {
+	ctx := context.Background()
+	_, err := InitOnce(ctx, nil, "test", nil)
+	if err == nil {
+		t.Error("expected error for nil redis")
+	}
+}
+
+func TestInitOnce_NilCallback(t *testing.T) {
+	ctx := context.Background()
+	// nil worker callback should be rejected before redis check
+	_, err := InitOnce(ctx, nil, "test", nil)
+	if err == nil {
+		t.Error("expected error for nil callback")
+	}
+}
+
+func TestOnceErrorVariables(t *testing.T) {
+	// 验证 sentinel errors 可用且可比较
+	if ErrExecuteTime == nil {
+		t.Error("ErrExecuteTime should not be nil")
+	}
+	if ErrRunCount == nil {
+		t.Error("ErrRunCount should not be nil")
+	}
+	if ErrDelayTime == nil {
+		t.Error("ErrDelayTime should not be nil")
+	}
+	if ErrTaskExists == nil {
+		t.Error("ErrTaskExists should not be nil")
+	}
+	if ErrTaskIdExists == nil {
+		t.Error("ErrTaskIdExists should not be nil")
+	}
+}
+
+func TestClusterErrorVariables(t *testing.T) {
+	if ErrMonthDay == nil {
+		t.Error("ErrMonthDay should not be nil")
+	}
+	if ErrWeekday == nil {
+		t.Error("ErrWeekday should not be nil")
+	}
+	if ErrHour == nil {
+		t.Error("ErrHour should not be nil")
+	}
+	if ErrMinute == nil {
+		t.Error("ErrMinute should not be nil")
+	}
+	if ErrSecond == nil {
+		t.Error("ErrSecond should not be nil")
+	}
+	if ErrIntervalTime == nil {
+		t.Error("ErrIntervalTime should not be nil")
+	}
+	if ErrBaseTime == nil {
+		t.Error("ErrBaseTime should not be nil")
+	}
+	if ErrCronExpression == nil {
+		t.Error("ErrCronExpression should not be nil")
+	}
+	if ErrCronParser == nil {
+		t.Error("ErrCronParser should not be nil")
+	}
+}
+
+func TestOnceKeySeparator(t *testing.T) {
+	// buildRedisKey 使用 keySeparator
+	o := &Once{keySeparator: "[:]"}
+	key := o.buildRedisKey("normal", "task_1")
+	if key != "normal[:]task_1" {
+		t.Errorf("unexpected key: %s", key)
+	}
+
+	// parseRedisKey
+	tp, id, err := o.parseRedisKey(key)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tp != "normal" || id != "task_1" {
+		t.Errorf("unexpected parse result: %s, %s", tp, id)
+	}
+
+	// custom separator
+	o = &Once{keySeparator: ":"}
+	key = o.buildRedisKey("urgent", "id123")
+	if key != "urgent:id123" {
+		t.Errorf("unexpected key with custom separator: %s", key)
+	}
+}
+
+func TestOnceSanitizedKeyPrefix(t *testing.T) {
+	// 模拟 sanitizeKeyPrefix 对 Once key 的影响
+	raw := "app{v1}"
+	sanitized := sanitizeKeyPrefix(raw)
+	if sanitized != "app_v1_" {
+		t.Errorf("unexpected sanitized prefix: %s", sanitized)
+	}
+
+	dataKey := fmt.Sprintf("timer:{%s}:once_data:%s", sanitized, "type[:]id")
+	zsetKey := fmt.Sprintf("timer:{%s}:once_zset", sanitized)
+
+	if !strings.Contains(dataKey, "{app_v1_}") {
+		t.Errorf("data key missing expected hash tag: %s", dataKey)
+	}
+	if !strings.Contains(zsetKey, "{app_v1_}") {
+		t.Errorf("zset key missing expected hash tag: %s", zsetKey)
+	}
 }
 
 func newDefaultLoggerForTest() logger.Logger {

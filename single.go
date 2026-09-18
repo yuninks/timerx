@@ -338,6 +338,7 @@ func (l *Single) addJob(ctx context.Context, jobData JobData, call func(ctx cont
 		l.logger.Errorf(ctx, "获取下次执行时间失败:%s", err.Error())
 		return 0, err
 	}
+
 	jobData.NextTime = *nextTime
 
 	// 生成唯一索引

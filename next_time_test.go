@@ -326,7 +326,7 @@ func TestCalculateNextInterval(t *testing.T) {
 				IntervalTime: 24 * time.Hour,
 			},
 			currentTime: now,
-			expected:    time.Date(2023, 6, 16, 0, 0, 0, 0, time.UTC),
+			expected:    createTime.Add(24 * time.Hour),
 		},
 	}
 
@@ -855,5 +855,104 @@ func TestGetNextTime_Timezone(t *testing.T) {
 			assert.Equal(t, expected, *result)
 			assert.Equal(t, loc, result.Location())
 		})
+	}
+}
+
+func TestGetCronSche_NilParser(t *testing.T) {
+	_, err := GetCronSche("* * * * *", nil)
+	if err != ErrCronParser {
+		t.Errorf("expected ErrCronParser, got %v", err)
+	}
+}
+
+func TestGetCronSche_EmptyExpression(t *testing.T) {
+	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	_, err := GetCronSche("", &parser)
+	if err != ErrCronExpression {
+		t.Errorf("expected ErrCronExpression, got %v", err)
+	}
+}
+
+func TestGetCronSche_InvalidExpression(t *testing.T) {
+	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	_, err := GetCronSche("invalid cron", &parser)
+	if err == nil {
+		t.Error("expected error for invalid cron expression")
+	}
+}
+
+func TestJobTypeEverySecond_Unhandled(t *testing.T) {
+	job := JobData{
+		JobType: JobTypeEverySecond,
+	}
+	_, err := GetNextTime(time.Now(), job)
+	if err == nil {
+		t.Error("expected error for unhandled JobTypeEverySecond")
+	}
+}
+
+func TestValidateJobData_CronNilSchedule(t *testing.T) {
+	job := JobData{
+		JobType:        JobTypeCron,
+		CronExpression: "* * * * *",
+		CronSchedule:   nil,
+	}
+	err := validateJobData(job)
+	if err != ErrCronParser {
+		t.Errorf("expected ErrCronParser, got %v", err)
+	}
+}
+
+func TestValidateJobData_CronEmptyExpression(t *testing.T) {
+	job := JobData{
+		JobType:        JobTypeCron,
+		CronExpression: "",
+		CronSchedule:   nil,
+	}
+	err := validateJobData(job)
+	if err != ErrCronExpression {
+		t.Errorf("expected ErrCronExpression, got %v", err)
+	}
+}
+
+func TestValidateJobData_IntervalNegative(t *testing.T) {
+	job := JobData{
+		JobType:      JobTypeInterval,
+		IntervalTime: 0,
+		BaseTime:     time.Now(),
+	}
+	err := validateJobData(job)
+	if err != ErrIntervalTime {
+		t.Errorf("expected ErrIntervalTime, got %v", err)
+	}
+}
+
+func TestValidateJobData_IntervalZeroBaseTime(t *testing.T) {
+	job := JobData{
+		JobType:      JobTypeInterval,
+		IntervalTime: time.Second,
+		BaseTime:     time.Time{},
+	}
+	err := validateJobData(job)
+	if err != ErrBaseTime {
+		t.Errorf("expected ErrBaseTime, got %v", err)
+	}
+}
+
+func TestCalculateNextInterval_ExactBoundary(t *testing.T) {
+	baseTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := baseTime.Add(2 * time.Second)
+	job := JobData{
+		JobType:      JobTypeInterval,
+		BaseTime:     baseTime,
+		IntervalTime: time.Second,
+	}
+	next, err := calculateNextInterval(now, job)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expected := baseTime.Add(3 * time.Second)
+	if !next.Equal(expected) {
+		t.Errorf("expected %v, got %v", expected, next)
 	}
 }

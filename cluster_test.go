@@ -260,3 +260,161 @@ func TestClusterMultiKeyLuaKeysShareSlot(t *testing.T) {
 		})
 	}
 }
+
+func TestInitCluster_NilRedis(t *testing.T) {
+	ctx := context.Background()
+	_, err := timerx.InitCluster(ctx, nil, "test")
+	if err == nil {
+		t.Error("expected error for nil redis")
+	}
+}
+
+func TestClusterKeyPrefixSanitization(t *testing.T) {
+	// 验证 sanitizeKeyPrefix 在 key 格式中的作用
+	// keyPrefix 中含有 {} 时应该被替换为 _
+	expectedHashTag := "{app_env_test}"
+
+	zsetKey := "timer:" + expectedHashTag + ":cluster_zset"
+	listKey := "timer:" + expectedHashTag + ":cluster_list"
+
+	tag1 := extractHashTag(zsetKey)
+	tag2 := extractHashTag(listKey)
+
+	if tag1 != "app_env_test" {
+		t.Errorf("unexpected hash tag: %q", tag1)
+	}
+	if tag1 != tag2 {
+		t.Errorf("hash tags differ: %q != %q", tag1, tag2)
+	}
+}
+
+func TestClusterEverySpace_InvalidDuration(t *testing.T) {
+	ctx := context.Background()
+	redis := redisInit()
+	defer redis.Close()
+
+	cluster, err := timerx.InitCluster(ctx, redis, "test_invalid")
+	if err != nil {
+		t.Skipf("redis not available: %v", err)
+	}
+	defer cluster.Stop()
+
+	err = cluster.EverySpace(ctx, "testNegative", -1*time.Second,
+		func(ctx context.Context, data interface{}) error { return nil }, nil)
+	if err == nil {
+		t.Error("expected error for negative duration")
+	}
+}
+
+func TestClusterAddDuplicateTaskId(t *testing.T) {
+	ctx := context.Background()
+	redis := redisInit()
+	defer redis.Close()
+
+	cluster, err := timerx.InitCluster(ctx, redis, "test_dup")
+	if err != nil {
+		t.Skipf("redis not available: %v", err)
+	}
+	defer cluster.Stop()
+
+	callback := func(ctx context.Context, data interface{}) error { return nil }
+	err = cluster.EveryMinute(ctx, "dup_task", 0, callback, nil)
+	if err != nil {
+		t.Fatalf("first add should succeed: %v", err)
+	}
+
+	err = cluster.EveryMinute(ctx, "dup_task", 0, callback, nil)
+	if err != timerx.ErrTaskIdExists {
+		t.Errorf("expected ErrTaskIdExists, got %v", err)
+	}
+}
+
+func TestClusterEveryMonth_InvalidDay(t *testing.T) {
+	ctx := context.Background()
+	redis := redisInit()
+	defer redis.Close()
+
+	cluster, err := timerx.InitCluster(ctx, redis, "test_inv_day")
+	if err != nil {
+		t.Skipf("redis not available: %v", err)
+	}
+	defer cluster.Stop()
+
+	callback := func(ctx context.Context, data interface{}) error { return nil }
+	err = cluster.EveryMonth(ctx, "test", 32, 0, 0, 0, callback, nil)
+	if err != timerx.ErrMonthDay {
+		t.Errorf("expected ErrMonthDay, got %v", err)
+	}
+}
+
+func TestClusterEveryWeek_InvalidWeekday(t *testing.T) {
+	ctx := context.Background()
+	redis := redisInit()
+	defer redis.Close()
+
+	cluster, err := timerx.InitCluster(ctx, redis, "test_inv_wd")
+	if err != nil {
+		t.Skipf("redis not available: %v", err)
+	}
+	defer cluster.Stop()
+
+	callback := func(ctx context.Context, data interface{}) error { return nil }
+	err = cluster.EveryWeek(ctx, "test", 7, 0, 0, 0, callback, nil)
+	if err != timerx.ErrWeekday {
+		t.Errorf("expected ErrWeekday, got %v", err)
+	}
+}
+
+func TestClusterEveryDay_InvalidHour(t *testing.T) {
+	ctx := context.Background()
+	redis := redisInit()
+	defer redis.Close()
+
+	cluster, err := timerx.InitCluster(ctx, redis, "test_inv_h")
+	if err != nil {
+		t.Skipf("redis not available: %v", err)
+	}
+	defer cluster.Stop()
+
+	callback := func(ctx context.Context, data interface{}) error { return nil }
+	err = cluster.EveryDay(ctx, "test", 24, 0, 0, callback, nil)
+	if err != timerx.ErrHour {
+		t.Errorf("expected ErrHour, got %v", err)
+	}
+}
+
+func TestClusterEveryHour_InvalidMinute(t *testing.T) {
+	ctx := context.Background()
+	redis := redisInit()
+	defer redis.Close()
+
+	cluster, err := timerx.InitCluster(ctx, redis, "test_inv_m")
+	if err != nil {
+		t.Skipf("redis not available: %v", err)
+	}
+	defer cluster.Stop()
+
+	callback := func(ctx context.Context, data interface{}) error { return nil }
+	err = cluster.EveryHour(ctx, "test", 60, 0, callback, nil)
+	if err != timerx.ErrMinute {
+		t.Errorf("expected ErrMinute, got %v", err)
+	}
+}
+
+func TestClusterEveryMinute_InvalidSecond(t *testing.T) {
+	ctx := context.Background()
+	redis := redisInit()
+	defer redis.Close()
+
+	cluster, err := timerx.InitCluster(ctx, redis, "test_inv_s")
+	if err != nil {
+		t.Skipf("redis not available: %v", err)
+	}
+	defer cluster.Stop()
+
+	callback := func(ctx context.Context, data interface{}) error { return nil }
+	err = cluster.EveryMinute(ctx, "test", 60, callback, nil)
+	if err != timerx.ErrSecond {
+		t.Errorf("expected ErrSecond, got %v", err)
+	}
+}

@@ -28,8 +28,8 @@ func main() {
 	// re()
 	// d()
 	// cluster()
-	// once()
-	single()
+	once()
+	// single()
 	// prioritys()
 
 	select {}
@@ -89,10 +89,32 @@ func once() {
 	}
 	// dy, _ := json.Marshal(d)
 
-	err = one.Create("test", "test3", 1*time.Second, d)
+	err = one.Create(ctx, "test", "test3", 1*time.Second, d)
 	if err != nil {
 		fmt.Println(err)
 	}
+
+	t := time.Now()
+
+	fmt.Println(t.Format(time.DateTime))
+
+	ts := []time.Time{
+		t.Add(time.Second * 11),
+		t.Add(time.Second * 12),
+		t.Add(time.Second * 13),
+		t.Add(time.Second * 14),
+		t.Add(time.Second * 15),
+		t.Add(time.Second * 16),
+		t.Add(time.Second * 17),
+		t.Add(time.Second * 18),
+		t.Add(time.Second * 19),
+		t.Add(time.Second * 20),
+		t.Add(time.Second * 21),
+		t.Add(time.Second * 22),
+	}
+
+	one.CreateByList(ctx, "test", "CreateByTime", ts, d)
+
 	// d = OnceData{
 	// 	Num: 4,
 	// }
@@ -124,9 +146,9 @@ func (l OnceWorker) Worker(ctx context.Context, taskType timerx.OnceTaskType, ta
 	}
 	defer file.Close()
 
-	file.WriteString(fmt.Sprintf("执行时间:%s\n", time.Now().Format("2006-01-02 15:04:05")))
+	file.WriteString(fmt.Sprintf("taskType:%s taskId:%s 执行时间:%s\n", taskType, taskId, time.Now().Format("2006-01-02 15:04:05")))
 
-	fmt.Println("执行时间:", time.Now().Format("2006-01-02 15:04:05"))
+	fmt.Println(taskType, ":", taskId, "执行时间:", time.Now().Format("2006-01-02 15:04:05"))
 	// fmt.Println(taskType, taskId)
 
 	// fmt.Printf("原来的参数：%+v %T\n", attachData, attachData)
