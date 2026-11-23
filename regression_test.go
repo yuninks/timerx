@@ -394,7 +394,7 @@ func TestRegression_TaskQueue(t *testing.T) {
 	}
 
 	// 有任务在执行时不整理
-	a.reconcile(ctx, true)
+	a.reconcile(ctx)
 	if processingLen(a) != 1 {
 		t.Errorf("reconcile moved inflight task")
 	}
@@ -415,22 +415,16 @@ func TestRegression_TaskQueue(t *testing.T) {
 		t.Errorf("dead instance not removed")
 	}
 
-	// 没有任务在执行时，遗留的任务放回或丢弃
+	// 没有任务在执行时，遗留的任务放回
 	client.LPush(ctx, b.processingKey, "left1")
-	b.reconcile(ctx, true)
+	b.reconcile(ctx)
 	if processingLen(b) != 1 {
 		t.Errorf("reconcile should wait for %d idle rounds", queueReconcileRounds)
 	}
 	b.idleRounds = queueReconcileRounds
-	b.reconcile(ctx, true)
+	b.reconcile(ctx)
 	if processingLen(b) != 0 || listLen() != 3 {
 		t.Errorf("reconcile requeue: processing=%d list=%d, want 0/3", processingLen(b), listLen())
-	}
-	client.LPush(ctx, b.processingKey, "left2")
-	b.idleRounds = queueReconcileRounds
-	b.reconcile(ctx, false)
-	if processingLen(b) != 0 || listLen() != 3 {
-		t.Errorf("reconcile drop: processing=%d list=%d, want 0/3", processingLen(b), listLen())
 	}
 }
 
@@ -600,5 +594,196 @@ func TestRegression_RedisCluster(t *testing.T) {
 			n, err := client.LLen(ctx, q.processingKey).Result()
 			return err == nil && n == 0
 		}, "processing list not empty after ack")
+	}
+}
+
+// 让匹配的 EVAL 失败指定次数，模拟 Redis 故障
+type failEvalHook struct {
+	arg    string // EVAL 参数中包含该值则失败
+	remain atomic.Int32
+}
+
+func (h *failEvalHook) DialHook(next redis.DialHook) redis.DialHook { return next }
+
+func (h *failEvalHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return func(ctx context.Context, cmd redis.Cmder) error {
+		if cmd.Name() == "eval" && h.remain.Load() > 0 {
+			for _, arg := range cmd.Args() {
+				if arg == h.arg {
+					h.remain.Add(-1)
+					err := fmt.Errorf("mock redis error")
+					cmd.SetErr(err)
+					return err
+				}
+			}
+		}
+		return next(ctx, cmd)
+	}
+}
+
+func (h *failEvalHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return next
+}
+
+// 重试写入 Redis 失败时任务不能丢，放回就绪队列重新执行
+func TestRegression_OnceRetrySaveFailure(t *testing.T) {
+	client := regressionRedis(t, "reg_retry_fail")
+	ctx := context.Background()
+
+	hook := &failEvalHook{arg: string(saveModeUnchanged)}
+	hook.remain.Store(1)
+	client.AddHook(hook)
+
+	var runs int32
+	o, err := InitOnce(ctx, client, "reg_retry_fail", onceWorkerFunc(func(ctx context.Context, taskType OnceTaskType, taskId string, attachData any) *OnceWorkerResp {
+		if atomic.AddInt32(&runs, 1) < 3 {
+			return &OnceWorkerResp{Retry: true}
+		}
+		return nil
+	}), WithLogger(silentLogger{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer o.Close()
+
+	if err := o.Save(ctx, "t", "x", 0, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// 第1次执行后重试保存失败 -> 重新执行 -> 重试 -> 完成
+	waitFor(t, 8*time.Second, func() bool { return atomic.LoadInt32(&runs) == 3 }, "task lost after retry save failure")
+	if hook.remain.Load() != 0 {
+		t.Errorf("retry save failure was not injected")
+	}
+}
+
+// 已到期、正在等待 worker 的任务不能被 Create 覆盖
+func TestRegression_OnceCreateWhileQueued(t *testing.T) {
+	client := regressionRedis(t, "reg_create_queued")
+	ctx := context.Background()
+
+	release := make(chan struct{})
+	var mu sync.Mutex
+	got := map[string]any{}
+	o, err := InitOnce(ctx, client, "reg_create_queued", onceWorkerFunc(func(ctx context.Context, taskType OnceTaskType, taskId string, attachData any) *OnceWorkerResp {
+		if taskId == "busy" {
+			<-release
+			return nil
+		}
+		mu.Lock()
+		got[taskId] = attachData
+		mu.Unlock()
+		return nil
+	}), WithLogger(silentLogger{}), WithMaxWorkers(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer o.Close()
+
+	if err := o.Save(ctx, "t", "busy", 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, 3*time.Second, func() bool {
+		n, _ := client.LLen(ctx, o.queue.processingKey).Result()
+		return n == 1
+	}, "busy task not started")
+
+	if err := o.Create(ctx, "t", "x", 0, "first"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, 3*time.Second, func() bool {
+		n, _ := client.LLen(ctx, o.listKey).Result()
+		return n == 1
+	}, "task not queued")
+
+	if err := o.Create(ctx, "t", "x", 0, "second"); err != ErrTaskExists {
+		t.Errorf("Create queued task err:%v, want ErrTaskExists", err)
+	}
+	close(release)
+
+	waitFor(t, 3*time.Second, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return got["x"] != nil
+	}, "queued task not executed")
+	mu.Lock()
+	defer mu.Unlock()
+	if got["x"] != "first" {
+		t.Errorf("executed with %v, want first", got["x"])
+	}
+}
+
+// 就绪队列里的旧记录不能让重新保存到以后执行的任务提前执行
+func TestRegression_OnceStaleEntryDoesNotRunEarly(t *testing.T) {
+	client := regressionRedis(t, "reg_stale")
+	ctx := context.Background()
+
+	var runs int32
+	o, err := InitOnce(ctx, client, "reg_stale", onceWorkerFunc(func(ctx context.Context, taskType OnceTaskType, taskId string, attachData any) *OnceWorkerResp {
+		atomic.AddInt32(&runs, 1)
+		return nil
+	}), WithLogger(silentLogger{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer o.Close()
+
+	if err := o.Save(ctx, "t", "x", time.Hour, "later"); err != nil {
+		t.Fatal(err)
+	}
+	// 失活实例遗留的旧记录被放回就绪队列
+	member := o.buildRedisKey("t", "x")
+	client.LPush(ctx, o.queue.processingPrefix+"dead-instance", member)
+	client.ZAdd(ctx, o.queue.instancesKey, redis.Z{Score: 1, Member: "dead-instance"})
+
+	waitFor(t, 15*time.Second, func() bool {
+		_, err := client.ZScore(ctx, o.queue.instancesKey, "dead-instance").Result()
+		return err == redis.Nil
+	}, "dead instance not recovered")
+	time.Sleep(2 * time.Second)
+
+	if n := atomic.LoadInt32(&runs); n != 0 {
+		t.Errorf("task executed %d times before its time", n)
+	}
+	if _, err := client.ZScore(ctx, o.zsetKey, member).Result(); err != nil {
+		t.Errorf("schedule lost err:%v", err)
+	}
+	if data, _ := o.Get("t", "x"); data == nil {
+		t.Errorf("task data lost")
+	}
+}
+
+// 任务结束（panic、时间列表执行完）后数据被清理，同ID可以再次 Create
+func TestRegression_OnceFinishedTaskCanBeCreatedAgain(t *testing.T) {
+	client := regressionRedis(t, "reg_finished")
+	ctx := context.Background()
+
+	var runs int32
+	o, err := InitOnce(ctx, client, "reg_finished", onceWorkerFunc(func(ctx context.Context, taskType OnceTaskType, taskId string, attachData any) *OnceWorkerResp {
+		atomic.AddInt32(&runs, 1)
+		if taskId == "panic" {
+			panic("mock panic")
+		}
+		// 时间列表只有一个时间，执行完后没有下一次
+		return &OnceWorkerResp{Retry: true}
+	}), WithLogger(silentLogger{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer o.Close()
+
+	if err := o.Create(ctx, "t", "panic", 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := o.CreateByList(ctx, "t", "list", []time.Time{time.Now().Add(200 * time.Millisecond)}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	waitFor(t, 5*time.Second, func() bool { return atomic.LoadInt32(&runs) == 2 }, "tasks not executed")
+
+	for _, id := range []string{"panic", "list"} {
+		waitFor(t, 3*time.Second, func() bool {
+			return o.Create(ctx, "t", id, time.Hour, nil) == nil
+		}, "finished task "+id+" can not be created again")
 	}
 }
