@@ -30,6 +30,7 @@ type Single struct {
 	workerList  sync.Map      // 任务列表，key为taskId，value为worker
 	timerIndex  int64         // 任务索引，用于生成taskId
 	stopChan    chan struct{} // 停止信号
+	stopOnce    sync.Once     //
 	hasRun      sync.Map      // 记录已经执行的任务，key为taskId，value为执行时间
 	timeout     time.Duration // 单次任务超时时间
 	cronParser  *cron.Parser  // cron表达式解析器
@@ -70,6 +71,10 @@ func (l *Single) startDaemon() {
 
 // 停止所有定时任务
 func (l *Single) Stop() {
+	l.stopOnce.Do(l.stop)
+}
+
+func (l *Single) stop() {
 	close(l.stopChan)
 
 	if l.cancel != nil {
@@ -395,6 +400,10 @@ func (l *Single) iterator(ctx context.Context) {
 	// 默认5秒后（如果没有值就暂停进来5秒）
 	newNextTime := nowTime.Add(time.Second * 5)
 
+	// 遍历期间新增的任务等遍历结束后再更新全局下次执行时间，避免被覆盖
+	l.nextTimeMux.Lock()
+	defer l.nextTimeMux.Unlock()
+
 	l.workerList.Range(func(k, v interface{}) bool {
 		timeStr, ok := v.(timerStr)
 		if !ok {
@@ -416,20 +425,20 @@ func (l *Single) iterator(ctx context.Context) {
 			// 更新下次执行时间
 			timeStr.JobData.NextTime = *nextTime
 
-			if nextTime.Before(newNextTime) {
-				// 本规则下次发送时间小于系统下次需要执行的时间：替换
-				newNextTime = *nextTime
-			}
-
 			go l.executeTask(ctx, timeStr, originTime)
 
+		}
+
+		// 未到期的任务也要参与计算，否则会等到默认的5秒后才被检查
+		if timeStr.JobData.NextTime.Before(newNextTime) {
+			newNextTime = timeStr.JobData.NextTime
 		}
 
 		return true
 
 	})
 
-	l.updateNextTime(newNextTime)
+	l.nextTime = newNextTime
 }
 
 // 执行任务
@@ -493,17 +502,4 @@ func (l *Single) doTask(ctx context.Context, timeStr timerStr, originTime time.T
 	}
 
 	return nil
-}
-
-// 更新下次执行时间
-func (s *Single) updateNextTime(newTime time.Time) {
-	s.nextTimeMux.Lock()
-	defer s.nextTimeMux.Unlock()
-
-	now := time.Now()
-	if newTime.Before(now) {
-		s.nextTime = now
-	} else {
-		s.nextTime = newTime
-	}
 }
