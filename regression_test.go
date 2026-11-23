@@ -787,3 +787,85 @@ func TestRegression_OnceFinishedTaskCanBeCreatedAgain(t *testing.T) {
 		}, "finished task "+id+" can not be created again")
 	}
 }
+
+// 回调耗时超过收尾操作的超时时间后，任务仍能正常删除
+func TestRegression_OnceSlowCallbackFinalizes(t *testing.T) {
+	client := regressionRedis(t, "reg_slow")
+	ctx := context.Background()
+
+	var runs int32
+	o, err := InitOnce(ctx, client, "reg_slow", onceWorkerFunc(func(ctx context.Context, taskType OnceTaskType, taskId string, attachData any) *OnceWorkerResp {
+		atomic.AddInt32(&runs, 1)
+		time.Sleep(queueOpTimeout + 500*time.Millisecond)
+		return nil
+	}), WithLogger(silentLogger{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer o.Close()
+
+	if err := o.Create(ctx, "t", "x", 0, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	dataKey := fmt.Sprintf("timer:{%s}:once_data:%s", o.keyPrefix, o.buildRedisKey("t", "x"))
+	waitFor(t, queueOpTimeout+5*time.Second, func() bool {
+		n, err := client.Exists(ctx, dataKey).Result()
+		return err == nil && n == 0
+	}, "slow task not deleted after callback")
+	if n := atomic.LoadInt32(&runs); n != 1 {
+		t.Errorf("task executed %d times, want 1", n)
+	}
+	if err := o.Create(ctx, "t", "x", time.Hour, nil); err != nil {
+		t.Errorf("Create after finish err:%v", err)
+	}
+}
+
+// 任务数据快到期时开始执行，执行期间数据不能过期，否则重试会被丢弃
+func TestRegression_OnceRetryKeepsDataAlive(t *testing.T) {
+	client := regressionRedis(t, "reg_keepalive")
+	ctx := context.Background()
+
+	release := make(chan struct{})
+	var runs int32
+	o, err := InitOnce(ctx, client, "reg_keepalive", onceWorkerFunc(func(ctx context.Context, taskType OnceTaskType, taskId string, attachData any) *OnceWorkerResp {
+		if taskId == "busy" {
+			<-release
+			return nil
+		}
+		if atomic.AddInt32(&runs, 1) == 1 {
+			time.Sleep(2 * time.Second)
+			return &OnceWorkerResp{Retry: true}
+		}
+		return nil
+	}), WithLogger(silentLogger{}), WithMaxWorkers(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer o.Close()
+
+	if err := o.Save(ctx, "t", "busy", 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, 3*time.Second, func() bool {
+		n, _ := client.LLen(ctx, o.queue.processingKey).Result()
+		return n == 1
+	}, "busy task not started")
+
+	if err := o.Save(ctx, "t", "x", 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, 3*time.Second, func() bool {
+		n, _ := client.LLen(ctx, o.listKey).Result()
+		return n == 1
+	}, "task not queued")
+
+	// 数据只剩1.5秒有效期，回调需要2秒
+	dataKey := fmt.Sprintf("timer:{%s}:once_data:%s", o.keyPrefix, o.buildRedisKey("t", "x"))
+	if ok, err := client.PExpire(ctx, dataKey, 1500*time.Millisecond).Result(); err != nil || !ok {
+		t.Fatalf("PExpire ok:%v err:%v", ok, err)
+	}
+	close(release)
+
+	waitFor(t, 8*time.Second, func() bool { return atomic.LoadInt32(&runs) == 2 }, "retry dropped after data expired during callback")
+}
