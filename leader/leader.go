@@ -19,6 +19,11 @@ import (
 // 作用：领导选举，是领导才执行，避免资源浪费
 // 依赖：priority
 
+const (
+	leaderVerifyInterval = time.Second     // 校验 Leader 锁的间隔
+	leaderVerifyTimeout  = 4 * time.Second // 持续无法校验超过该时间视为失去 Leader（小于锁的过期时间）
+)
+
 type Leader struct {
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -156,8 +161,10 @@ func (l *Leader) getLeaderLock() error {
 		}
 	}()
 
-	// 等待超时退出
-	<-lock.GetCtx().Done()
+	// 等待失去 Leader 锁
+	// lockx 续期遇到 Redis 错误会停止续期但不会结束 ctx，
+	// 这里定期校验锁是否仍由自己持有，避免锁已过期还长期认为自己是 Leader
+	l.waitLeaderLost(ctx, lock)
 
 	// 锁已过期，重置leader状态
 	l.leaderLock.Lock()
@@ -174,6 +181,33 @@ func (l *Leader) getLeaderLock() error {
 
 	return nil
 
+}
+
+// 阻塞直到失去 Leader 锁
+func (l *Leader) waitLeaderLost(ctx context.Context, lock *lockx.GlobalLock) {
+	ticker := time.NewTicker(leaderVerifyInterval)
+	defer ticker.Stop()
+
+	lastVerified := time.Now()
+
+	for {
+		select {
+		case <-lock.GetCtx().Done():
+			return
+		case <-ticker.C:
+			val, err := l.redis.Get(ctx, l.leaderUniLockKey).Result()
+			if err == nil && val == lock.GetValue() {
+				lastVerified = time.Now()
+				continue
+			}
+			if err != nil && !errors.Is(err, redis.Nil) && time.Since(lastVerified) < leaderVerifyTimeout {
+				// Redis 暂时异常，锁可能仍然有效
+				continue
+			}
+			l.logger.Errorf(l.ctx, "waitLeaderLost Instance %s lost leader lock err:%v", lock.GetValue(), err)
+			return
+		}
+	}
 }
 
 // isCurrentLeader 检查当前实例是否是leader
