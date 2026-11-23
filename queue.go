@@ -107,10 +107,10 @@ func (q *taskQueue) pop(ctx context.Context) (string, error) {
 	return member, nil
 }
 
-// 空闲时整理：没有执行中的任务时，处理中队列里剩下的是 ack/nack 失败的遗留
+// 空闲时整理：没有执行中的任务时，处理中队列里剩下的是遗留任务
+// （ack/nack 失败，或 BLMOVE 已执行但响应丢失），放回就绪队列
 // 只能在取任务的协程里调用
-// @param requeue bool 遗留任务是否放回就绪队列
-func (q *taskQueue) reconcile(ctx context.Context, requeue bool) {
+func (q *taskQueue) reconcile(ctx context.Context) {
 	if q.inflight.Load() != 0 {
 		q.idleRounds = 0
 		return
@@ -123,23 +123,17 @@ func (q *taskQueue) reconcile(ctx context.Context, requeue bool) {
 
 	script := `
 	local moved = 0
-	while moved < tonumber(ARGV[2]) do
+	while moved < tonumber(ARGV[1]) do
 		local task = redis.call('RPOP', KEYS[1])
 		if not task then
 			break
 		end
-		if ARGV[1] == '1' then
-			redis.call('RPUSH', KEYS[2], task)
-		end
+		redis.call('RPUSH', KEYS[2], task)
 		moved = moved + 1
 	end
 	return moved
 	`
-	flag := "0"
-	if requeue {
-		flag = "1"
-	}
-	moved, err := q.redis.Eval(ctx, script, []string{q.processingKey, q.listKey}, flag, queueRecoverBatch).Int64()
+	moved, err := q.redis.Eval(ctx, script, []string{q.processingKey, q.listKey}, queueRecoverBatch).Int64()
 	if err != nil {
 		if ctx.Err() == nil {
 			q.logger.Errorf(ctx, "taskQueue reconcile err:%v", err)
@@ -147,7 +141,7 @@ func (q *taskQueue) reconcile(ctx context.Context, requeue bool) {
 		return
 	}
 	if moved > 0 {
-		q.logger.Infof(ctx, "taskQueue reconcile %d leftover tasks requeue:%v", moved, requeue)
+		q.logger.Infof(ctx, "taskQueue requeued %d leftover tasks", moved)
 	}
 }
 

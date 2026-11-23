@@ -604,8 +604,7 @@ func (c *Cluster) executeTasks() {
 				return
 			}
 			if err == redis.Nil {
-				// 周期任务的遗留不再补跑
-				c.queue.reconcile(c.ctx, false)
+				c.queue.reconcile(c.ctx)
 				continue
 			}
 			c.logger.Errorf(c.ctx, "Failed to pop task: %v", err)
