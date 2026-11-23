@@ -93,12 +93,25 @@ const (
 	jobTypeList = "list"
 )
 
-type createSource string
+// 保存方式
+type saveMode string
 
 const (
-	createSourceDefault = "default"
-	createSourceRetry   = "retry"
+	saveModeOverwrite saveMode = "overwrite" // 覆盖
+	saveModeCreate    saveMode = "create"    // 任务不存在才保存
+	saveModeUnchanged saveMode = "unchanged" // 任务数据未变化才保存
 )
+
+// 任务数据已变化（执行期间被重新保存或删除）
+var errTaskChanged = errors.New("task changed")
+
+// 待保存的任务
+type saveArgs struct {
+	redisKey string
+	data     []byte
+	nextTime time.Time
+	expire   time.Duration
+}
 
 // 初始化
 func InitOnce(ctx context.Context, re redis.UniversalClient, keyPrefix string, call Callback, opts ...Option) (*Once, error) {
@@ -374,7 +387,7 @@ func (l *Once) executeTasks() {
 				return
 			}
 			if err == redis.Nil {
-				l.queue.reconcile(l.ctx, true)
+				l.queue.reconcile(l.ctx)
 				continue
 			}
 			l.logger.Errorf(l.ctx, "Failed to pop task: %v", err)
@@ -425,14 +438,23 @@ func (l *Once) SaveByList(ctx context.Context, taskType OnceTaskType, taskId str
 // 添加任务(覆盖)
 // 重复插入就代表覆盖
 func (w *Once) save(ctx context.Context, jobType jobType, taskType OnceTaskType, taskId string, taskTimes []time.Time, attachData any, runCount int) error {
+	args, err := w.prepareSave(ctx, jobType, taskType, taskId, taskTimes, attachData, runCount)
+	if err != nil {
+		return err
+	}
+	return w.execSave(ctx, saveModeOverwrite, "", args)
+}
+
+// 校验并生成待保存的数据（不访问Redis）
+func (w *Once) prepareSave(ctx context.Context, jobType jobType, taskType OnceTaskType, taskId string, taskTimes []time.Time, attachData any, runCount int) (*saveArgs, error) {
 	if len(taskTimes) == 0 {
 		w.logger.Errorf(ctx, "delay time must be positive taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
-		return ErrExecuteTime
+		return nil, ErrExecuteTime
 	}
 
 	if jobType == jobTypeList && len(taskTimes) <= runCount {
 		w.logger.Errorf(ctx, "delay time must be positive taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
-		return ErrRunCount
+		return nil, ErrRunCount
 	}
 
 	// 根据时间从小到大排序
@@ -442,7 +464,7 @@ func (w *Once) save(ctx context.Context, jobType jobType, taskType OnceTaskType,
 
 	if taskTimes[0].IsZero() {
 		w.logger.Errorf(ctx, "execute time is zero taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
-		return ErrExecuteTime
+		return nil, ErrExecuteTime
 	}
 
 	now := time.Now()
@@ -451,15 +473,13 @@ func (w *Once) save(ctx context.Context, jobType jobType, taskType OnceTaskType,
 	latestTime := taskTimes[len(taskTimes)-1]
 	if jobType == jobTypeList && latestTime.Before(now) {
 		w.logger.Errorf(ctx, "delay time must be positive taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
-		return ErrDelayTime
+		return nil, ErrDelayTime
 	}
 
 	nextTime := taskTimes[0]
 	if jobType == jobTypeList {
 		nextTime = taskTimes[runCount]
 	}
-
-	redisKey := w.buildRedisKey(taskType, taskId)
 
 	ed := extendData{
 		TaskTimes: taskTimes,
@@ -471,29 +491,61 @@ func (w *Once) save(ctx context.Context, jobType jobType, taskType OnceTaskType,
 	b, err := json.Marshal(ed)
 	if err != nil {
 		w.logger.Errorf(ctx, "save json.Marshal err:%v taskType:%v taskId:%v", err, taskType, taskId)
-		return err
+		return nil, err
 	}
-
-	// 使用事务确保原子性
-	pipe := w.redis.TxPipeline()
 
 	// 数据保留到最后一次执行时间之后
 	expiresTime := latestTime
 	if expiresTime.Before(now) {
 		expiresTime = now
 	}
-	dataExpire := expiresTime.Add(time.Minute * 30).Sub(now)
 
-	dataKey := fmt.Sprintf("timer:{%s}:once_data:%s", w.keyPrefix, redisKey)
-	pipe.SetEx(ctx, dataKey, b, dataExpire)
-	pipe.ZAdd(ctx, w.zsetKey, redis.Z{
-		Score:  float64(nextTime.UnixMilli()),
-		Member: redisKey,
-	})
-	_, err = pipe.Exec(ctx)
+	return &saveArgs{
+		redisKey: w.buildRedisKey(taskType, taskId),
+		data:     b,
+		nextTime: nextTime,
+		expire:   expiresTime.Add(time.Minute * 30).Sub(now),
+	}, nil
+}
+
+// 原子地写入任务数据和执行时间
+// @param expectData string saveModeUnchanged 时任务当前应有的数据
+func (w *Once) execSave(ctx context.Context, mode saveMode, expectData string, args *saveArgs) error {
+	script := `
+	if ARGV[1] == 'create' then
+		if redis.call('EXISTS', KEYS[1]) == 1 or redis.call('ZSCORE', KEYS[2], ARGV[5]) then
+			return 0
+		end
+	elseif ARGV[1] == 'unchanged' then
+		if redis.call('GET', KEYS[1]) ~= ARGV[6] then
+			return 0
+		end
+	end
+	redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[3])
+	redis.call('ZADD', KEYS[2], ARGV[4], ARGV[5])
+	return 1
+	`
+	dataKey := fmt.Sprintf("timer:{%s}:once_data:%s", w.keyPrefix, args.redisKey)
+	saved, err := w.redis.Eval(
+		ctx,
+		script,
+		[]string{dataKey, w.zsetKey},
+		string(mode),
+		args.data,
+		args.expire.Milliseconds(),
+		args.nextTime.UnixMilli(),
+		args.redisKey,
+		expectData,
+	).Int64()
 	if err != nil {
-		w.logger.Errorf(ctx, "save task failed:%v taskType:%v taskId:%v attachData:%v retryCount:%v", err, taskType, taskId, attachData, runCount)
+		w.logger.Errorf(ctx, "save task failed:%v key:%s mode:%s", err, args.redisKey, mode)
 		return err
+	}
+	if saved == 0 {
+		if mode == saveModeCreate {
+			return ErrTaskExists
+		}
+		return errTaskChanged
 	}
 
 	return nil
@@ -505,57 +557,49 @@ func (l *Once) Create(ctx context.Context, taskType OnceTaskType, taskId string,
 		delayTime = 0
 	}
 	execTime := time.Now().Add(delayTime)
-	return l.create(ctx, createSourceDefault, jobTypeOnce, taskType, taskId, []time.Time{execTime}, attachData, 0)
+	return l.create(ctx, jobTypeOnce, taskType, taskId, []time.Time{execTime}, attachData, 0)
 }
 
 // 指定时间执行(不覆盖)
 func (l *Once) CreateByTime(ctx context.Context, taskType OnceTaskType, taskId string, executeTime time.Time, attachData any) error {
-	return l.create(ctx, createSourceDefault, jobTypeOnce, taskType, taskId, []time.Time{executeTime}, attachData, 0)
+	return l.create(ctx, jobTypeOnce, taskType, taskId, []time.Time{executeTime}, attachData, 0)
 }
 
 // 指定多个时间执行(不覆盖)
 func (l *Once) CreateByList(ctx context.Context, taskType OnceTaskType, taskId string, taskTimes []time.Time, attachData any) error {
-	return l.create(ctx, createSourceDefault, jobTypeList, taskType, taskId, taskTimes, attachData, 0)
+	return l.create(ctx, jobTypeList, taskType, taskId, taskTimes, attachData, 0)
 }
 
-func (l *Once) create(ctx context.Context, source createSource, jobType jobType, taskType OnceTaskType, taskId string, taskTimes []time.Time, attachData any, runCount int) error {
-	if len(taskTimes) <= 0 {
-		l.logger.Errorf(ctx, "delay time must be positive taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
-		return ErrExecuteTime
-	}
-
-	redisKey := l.buildRedisKey(taskType, taskId)
-
-	if source != createSourceRetry {
-		// 这里加一个全局锁 从Retry来的不需要 因为已经加锁了
-		lock, err := lockx.NewGlobalLock(ctx, l.redis, l.globalLockPrefix+redisKey)
-		if err != nil {
-			l.logger.Errorf(ctx, "processTask timer:获取锁失败:%s", taskId)
-			return err
-		}
-		// 锁被占用时 lockx 返回 redis.Nil：同ID任务正在创建或执行
-		b, err := lock.Lock()
-		if err != nil && !errors.Is(err, redis.Nil) {
-			l.logger.Errorf(ctx, "create timer:获取锁失败:%s %+v", taskId, err)
-			return err
-		}
-		if !b {
-			l.logger.Errorf(ctx, "create task is creating or running taskType:%v taskId:%v", taskType, taskId)
-			return ErrTaskExists
-		}
-		defer lock.Unlock()
-	}
-
-	_, err := l.redis.ZScore(ctx, l.zsetKey, redisKey).Result()
+func (l *Once) create(ctx context.Context, jobType jobType, taskType OnceTaskType, taskId string, taskTimes []time.Time, attachData any, runCount int) error {
+	args, err := l.prepareSave(ctx, jobType, taskType, taskId, taskTimes, attachData, runCount)
 	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			return l.save(ctx, jobType, taskType, taskId, taskTimes, attachData, runCount)
-		}
-		l.logger.Errorf(ctx, "redis.ZScore err:%v", err)
 		return err
 	}
-	l.logger.Errorf(l.ctx, "task exists taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
-	return ErrTaskExists
+
+	// 这里加一个全局锁
+	lock, err := lockx.NewGlobalLock(ctx, l.redis, l.globalLockPrefix+args.redisKey)
+	if err != nil {
+		l.logger.Errorf(ctx, "create timer:获取锁失败:%s", taskId)
+		return err
+	}
+	// 锁被占用时 lockx 返回 redis.Nil：同ID任务正在创建或执行
+	b, err := lock.Lock()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		l.logger.Errorf(ctx, "create timer:获取锁失败:%s %+v", taskId, err)
+		return err
+	}
+	if !b {
+		l.logger.Errorf(ctx, "create task is creating or running taskType:%v taskId:%v", taskType, taskId)
+		return ErrTaskExists
+	}
+	defer lock.Unlock()
+
+	// 任务数据存在即任务存在（包括已到期、正在等待执行的任务）
+	err = l.execSave(ctx, saveModeCreate, "", args)
+	if errors.Is(err, ErrTaskExists) {
+		l.logger.Errorf(ctx, "task exists taskType:%v taskId:%v attachData:%v runCount:%v", taskType, taskId, attachData, runCount)
+	}
+	return err
 }
 
 // 删除任务
@@ -696,26 +740,36 @@ func (l *Once) runTask(key string) (done bool) {
 	}()
 
 	// 读取数据
-	dataKey := fmt.Sprintf("timer:{%s}:once_data:%s", l.keyPrefix, l.buildRedisKey(taskType, taskId))
-	str, err := l.redis.Get(ctx, dataKey).Result()
+	// 任务还在等待执行时间(取出后被重新保存)时不执行，到期后会再次进入就绪队列
+	loadScript := `
+	if redis.call('ZSCORE', KEYS[2], ARGV[1]) then
+		return false
+	end
+	return redis.call('GET', KEYS[1])
+	`
+	dataKey := fmt.Sprintf("timer:{%s}:once_data:%s", l.keyPrefix, key)
+	str, err := l.redis.Eval(ctx, loadScript, []string{dataKey, l.zsetKey}, key).Text()
 	if err != nil {
-		l.logger.Errorf(ctx, "processTask redis.Get key:%s err:%s", key, err)
+		l.logger.Errorf(ctx, "processTask load data key:%s err:%s", key, err)
 		// 数据不存在代表任务已删除或已完成
 		return errors.Is(err, redis.Nil)
 	}
 
-	ed := extendData{}
-	if err := json.Unmarshal([]byte(str), &ed); err != nil {
-		l.logger.Errorf(ctx, "processTask json.Unmarshal err:%v key:%s", err, key)
-		return true
-	}
-
-	resp := l.worker.Worker(ctx, taskType, taskId, ed.Data)
-	l.logger.Infof(ctx, "processTask exec key:%s resp:%+v data:%s", key, resp, str)
-
 	// 回调结束后的收尾不受关闭影响
 	finishCtx, finishCancel := context.WithTimeout(context.WithoutCancel(ctx), queueOpTimeout)
 	defer finishCancel()
+
+	ed := extendData{}
+	if err := json.Unmarshal([]byte(str), &ed); err != nil {
+		l.logger.Errorf(ctx, "processTask json.Unmarshal err:%v key:%s", err, key)
+		if err := l.deleteIfUnchanged(finishCtx, key, str); err != nil {
+			l.logger.Errorf(ctx, "processTask delete err:%v", err)
+		}
+		return true
+	}
+
+	resp := l.callWorker(ctx, taskType, taskId, ed.Data)
+	l.logger.Infof(ctx, "processTask exec key:%s resp:%+v data:%s", key, resp, str)
 
 	if resp == nil || !resp.Retry {
 		// 完成 删除任务
@@ -727,10 +781,19 @@ func (l *Once) runTask(key string) (done bool) {
 	}
 
 	// 重新放入队列
-	if err := l.handleRetry(finishCtx, taskType, taskId, &ed, resp, str); err != nil {
-		l.logger.Errorf(ctx, "processTask handleRetry err:%v", err)
-	}
-	return true
+	return l.handleRetry(finishCtx, taskType, taskId, &ed, resp, str)
+}
+
+// 执行回调，panic 视为任务结束且不重试
+func (l *Once) callWorker(ctx context.Context, taskType OnceTaskType, taskId string, data any) (resp *OnceWorkerResp) {
+	defer func() {
+		if err := recover(); err != nil {
+			l.logger.Errorf(ctx, "processTask panic:%s stack:%s", err, string(debug.Stack()))
+			resp = nil
+		}
+	}()
+
+	return l.worker.Worker(ctx, taskType, taskId, data)
 }
 
 // 任务执行结束后删除任务
@@ -748,20 +811,25 @@ func (l *Once) deleteIfUnchanged(ctx context.Context, redisKey string, rawData s
 	return l.redis.Eval(ctx, script, []string{dataKey, l.zsetKey}, rawData, redisKey).Err()
 }
 
+// 重试任务
+// @return done bool 任务是否处理结束 false代表重试未能保存，需要放回就绪队列重新执行
 func (l *Once) handleRetry(ctx context.Context, taskType OnceTaskType, taskId string,
-	ed *extendData, resp *OnceWorkerResp, rawData string) error {
+	ed *extendData, resp *OnceWorkerResp, rawData string) (done bool) {
+	redisKey := l.buildRedisKey(taskType, taskId)
+
+	// 任务结束：删除任务
+	finish := func() bool {
+		if err := l.deleteIfUnchanged(ctx, redisKey, rawData); err != nil {
+			l.logger.Errorf(ctx, "handleRetry delete err:%v", err)
+		}
+		return true
+	}
+
 	// 限制重试次数
 	ed.RunCount++
 	if l.maxRunCount > 0 && ed.RunCount > l.maxRunCount {
 		l.logger.Infof(ctx, "handleRetry task exceeded retry limit: %s %s %d", taskType, taskId, l.maxRunCount)
-		return l.deleteIfUnchanged(ctx, l.buildRedisKey(taskType, taskId), rawData)
-	}
-
-	// 执行期间任务被重新保存：以新保存的为准，不再重试旧的
-	dataKey := fmt.Sprintf("timer:{%s}:once_data:%s", l.keyPrefix, l.buildRedisKey(taskType, taskId))
-	if cur, err := l.redis.Get(ctx, dataKey).Result(); err == nil && cur != rawData {
-		l.logger.Infof(ctx, "handleRetry task was saved again during execution, skip retry: %s %s", taskType, taskId)
-		return nil
+		return finish()
 	}
 
 	// 更新延迟时间 延迟为0代表立即重试
@@ -780,6 +848,23 @@ func (l *Once) handleRetry(ctx context.Context, taskType OnceTaskType, taskId st
 	l.logger.Infof(ctx, "handleRetry retrying task: %s:%s, retry count: %d",
 		taskType, taskId, ed.RunCount)
 
-	// 不覆盖的新建
-	return l.create(ctx, createSourceRetry, ed.JobType, taskType, taskId, ed.TaskTimes, ed.Data, ed.RunCount)
+	args, err := l.prepareSave(ctx, ed.JobType, taskType, taskId, ed.TaskTimes, ed.Data, ed.RunCount)
+	if err != nil {
+		// 无法再重试（如时间列表已执行完）
+		l.logger.Errorf(ctx, "handleRetry can not retry: %s %s err:%v", taskType, taskId, err)
+		return finish()
+	}
+
+	// 执行期间任务被重新保存或删除：以最新的为准，不再重试旧的
+	err = l.execSave(ctx, saveModeUnchanged, rawData, args)
+	if errors.Is(err, errTaskChanged) {
+		l.logger.Infof(ctx, "handleRetry task changed during execution, skip retry: %s %s", taskType, taskId)
+		return true
+	}
+	if err != nil {
+		l.logger.Errorf(ctx, "handleRetry save err:%v", err)
+		return false
+	}
+
+	return true
 }
