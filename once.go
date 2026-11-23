@@ -755,21 +755,26 @@ func (l *Once) runTask(key string) (done bool) {
 		return errors.Is(err, redis.Nil)
 	}
 
-	// 回调结束后的收尾不受关闭影响
+	ed := extendData{}
+	unmarshalErr := json.Unmarshal([]byte(str), &ed)
+
+	var resp *OnceWorkerResp
+	if unmarshalErr == nil {
+		resp = l.callWorker(ctx, taskType, taskId, ed.Data)
+		l.logger.Infof(ctx, "processTask exec key:%s resp:%+v data:%s", key, resp, str)
+	}
+
+	// 回调结束后的收尾不受关闭和回调耗时影响
 	finishCtx, finishCancel := context.WithTimeout(context.WithoutCancel(ctx), queueOpTimeout)
 	defer finishCancel()
 
-	ed := extendData{}
-	if err := json.Unmarshal([]byte(str), &ed); err != nil {
-		l.logger.Errorf(ctx, "processTask json.Unmarshal err:%v key:%s", err, key)
+	if unmarshalErr != nil {
+		l.logger.Errorf(ctx, "processTask json.Unmarshal err:%v key:%s", unmarshalErr, key)
 		if err := l.deleteIfUnchanged(finishCtx, key, str); err != nil {
 			l.logger.Errorf(ctx, "processTask delete err:%v", err)
 		}
 		return true
 	}
-
-	resp := l.callWorker(ctx, taskType, taskId, ed.Data)
-	l.logger.Infof(ctx, "processTask exec key:%s resp:%+v data:%s", key, resp, str)
 
 	if resp == nil || !resp.Retry {
 		// 完成 删除任务
