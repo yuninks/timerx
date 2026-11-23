@@ -741,14 +741,23 @@ func (l *Once) runTask(key string) (done bool) {
 
 	// 读取数据
 	// 任务还在等待执行时间(取出后被重新保存)时不执行，到期后会再次进入就绪队列
+	// 数据的有效期延长到覆盖本次执行，避免执行期间过期导致重试被丢弃
 	loadScript := `
 	if redis.call('ZSCORE', KEYS[2], ARGV[1]) then
 		return false
 	end
-	return redis.call('GET', KEYS[1])
+	local data = redis.call('GET', KEYS[1])
+	if data then
+		local ttl = redis.call('PTTL', KEYS[1])
+		if ttl >= 0 and ttl < tonumber(ARGV[2]) then
+			redis.call('PEXPIRE', KEYS[1], ARGV[2])
+		end
+	end
+	return data
 	`
 	dataKey := fmt.Sprintf("timer:{%s}:once_data:%s", l.keyPrefix, key)
-	str, err := l.redis.Eval(ctx, loadScript, []string{dataKey, l.zsetKey}, key).Text()
+	keepAlive := l.timeout + time.Minute
+	str, err := l.redis.Eval(ctx, loadScript, []string{dataKey, l.zsetKey}, key, keepAlive.Milliseconds()).Text()
 	if err != nil {
 		l.logger.Errorf(ctx, "processTask load data key:%s err:%s", key, err)
 		// 数据不存在代表任务已删除或已完成
