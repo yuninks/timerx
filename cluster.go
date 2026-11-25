@@ -43,7 +43,9 @@ type Cluster struct {
 	wg         sync.WaitGroup // 等待组
 	workerList sync.Map       // 注册的任务列表
 	stopChan   chan struct{}  //
+	stopOnce   sync.Once      //
 	instanceId string         // 实例ID
+	queue      *taskQueue     // 就绪队列
 
 	priority    *priority.Priority // 全局优先级
 	priorityKey string             // 全局优先级的key
@@ -102,6 +104,15 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 		workerChan:     make(chan struct{}, op.maxWorkers),
 		maxWorkers:     op.maxWorkers,
 	}
+
+	clu.queue = newTaskQueue(
+		red,
+		clu.logger,
+		clu.listKey,
+		fmt.Sprintf("timer:{%s}:cluster_instances", keyPrefix),
+		fmt.Sprintf("timer:{%s}:cluster_processing:", keyPrefix),
+		clu.instanceId,
+	)
 
 	// 初始化优先级
 
@@ -177,6 +188,10 @@ func InitCluster(ctx context.Context, red redis.UniversalClient, keyPrefix strin
 
 // Stop 停止集群定时器
 func (l *Cluster) Stop() {
+	l.stopOnce.Do(l.stop)
+}
+
+func (l *Cluster) stop() {
 	close(l.stopChan)
 	if l.usePriority && l.priority != nil {
 		l.priority.Close()
@@ -207,6 +222,13 @@ func (l *Cluster) startDaemon() {
 
 	l.wg.Add(1)
 	go l.cleanExecuteInfoLoop()
+
+	// 上报存活、回收失活实例的任务
+	l.wg.Add(1)
+	go func() {
+		defer l.wg.Done()
+		l.queue.loop(l.ctx, l.stopChan, l.leader.IsLeader)
+	}()
 
 }
 
@@ -544,42 +566,54 @@ func (c *Cluster) executeTasks() {
 	defer c.wg.Done()
 
 	for {
-
 		select {
 		case <-c.stopChan:
 			return
 		case <-c.ctx.Done():
 			return
 		default:
-			func() {
-
-				if c.usePriority && !c.priority.IsLatest(c.ctx) {
-					time.Sleep(5 * time.Second)
-					return
-				}
-
-				taskID, err := c.redis.BLPop(c.ctx, 10*time.Second, c.listKey).Result()
-				if err != nil {
-					if err != redis.Nil {
-						c.logger.Errorf(c.ctx, "Failed to pop task: %v", err)
-						time.Sleep(5 * time.Second)
-					}
-					return
-				}
-
-				if len(taskID) < 2 {
-					c.logger.Errorf(c.ctx, "Invalid BLPop result: %v", taskID)
-					return
-				}
-
-				// 限制并发数量
-				c.workerChan <- struct{}{}
-
-				go c.processTask(taskID[1])
-			}()
 		}
-	}
 
+		if c.usePriority && !c.priority.IsLatest(c.ctx) {
+			sleepCtx(c.ctx, c.stopChan, 5*time.Second)
+			continue
+		}
+
+		if !c.queue.ready() {
+			sleepCtx(c.ctx, c.stopChan, 200*time.Millisecond)
+			continue
+		}
+
+		// 限制并发数量：先占用worker再取任务，取出的任务一定有worker处理
+		select {
+		case <-c.stopChan:
+			return
+		case <-c.ctx.Done():
+			return
+		case c.workerChan <- struct{}{}:
+		}
+		if c.ctx.Err() != nil {
+			<-c.workerChan
+			return
+		}
+
+		taskID, err := c.queue.pop(c.ctx)
+		if err != nil {
+			<-c.workerChan
+			if c.ctx.Err() != nil {
+				return
+			}
+			if err == redis.Nil {
+				c.queue.reconcile(c.ctx)
+				continue
+			}
+			c.logger.Errorf(c.ctx, "Failed to pop task: %v", err)
+			sleepCtx(c.ctx, c.stopChan, 5*time.Second)
+			continue
+		}
+
+		go c.processTask(taskID)
+	}
 }
 
 // 执行任务
@@ -588,6 +622,21 @@ func (l *Cluster) processTask(taskId string) {
 	defer func() {
 		<-l.workerChan
 	}()
+
+	if l.runTask(taskId) {
+		l.queue.ack(l.ctx, taskId)
+		return
+	}
+
+	// 暂时无法处理：稍后放回就绪队列，由任意实例重新处理
+	sleepCtx(l.ctx, l.stopChan, time.Second)
+	l.queue.nack(l.ctx, taskId)
+}
+
+// 执行任务
+// @return done bool 任务是否处理结束 false代表需要放回就绪队列
+func (l *Cluster) runTask(taskId string) (done bool) {
+	done = true
 
 	begin := time.Now()
 
@@ -631,8 +680,14 @@ func (l *Cluster) processTask(taskId string) {
 		l.logger.Errorf(ctx, "doTask timer:获取锁失败:%s", taskId)
 		return
 	}
-	if b, err := lock.Lock(); !b || err != nil {
+	// 锁被占用时 lockx 返回 redis.Nil：上一次还在执行，跳过本次
+	b, err := lock.Lock()
+	if err != nil && !errors.Is(err, redis.Nil) {
 		l.logger.Errorf(ctx, "doTask timer:获取锁失败:%s %+v", taskId, err)
+		return false
+	}
+	if !b {
+		l.logger.Errorf(ctx, "doTask timer:任务正在执行中，跳过本次:%s", taskId)
 		return
 	}
 	defer lock.Unlock()
@@ -648,7 +703,7 @@ func (l *Cluster) processTask(taskId string) {
 	// 执行任务
 	if err := t.Callback(ctx, t.ExtendData); err != nil {
 		l.logger.Errorf(ctx, "doTask timer:执行任务失败:%s %+v", taskId, err)
-		return
 	}
 
+	return
 }
